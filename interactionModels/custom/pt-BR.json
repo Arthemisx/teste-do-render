@@ -1,0 +1,165 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "slots": [],
+          "name": "QueroJogarIntent",
+          "samples": [
+            "quero jogar",
+            "vamos jogar",
+            "iniciar jogo",
+            "jogar"
+          ]
+        },
+        {
+          "slots": [],
+          "name": "EscolherMemoriaIntent",
+          "samples": [
+            "memorizar palavras",
+            "jogo de memorizar palavras",
+            "jogo de palavras",
+            "palavras",
+            "memória de palavras",
+            "quero memorizar palavras"
+          ]
+        },
+        {
+          "slots": [],
+          "name": "EscolherParentesIntent",
+          "samples": [
+            "jogo de parentes",
+            "parentes",
+            "família",
+            "cadastro de parentes",
+            "jogo da família",
+            "quero jogar de parentes"
+          ]
+        },
+        {
+          "slots": [
+            {
+              "name": "personName",
+              "type": "AMAZON.FirstName"
+            },
+            {
+              "name": "relation",
+              "type": "RELATION_TYPE"
+            }
+          ],
+          "name": "RegisterPersonRelationIntent",
+          "samples": [
+            "{personName} é meu {relation}",
+            "{personName} é minha {relation}",
+            "cadastrar {personName} como meu {relation}",
+            "cadastrar {personName} como minha {relation}",
+            "registrar {personName} como meu {relation}",
+            "registrar {personName} como minha {relation}"
+          ]
+        },
+        {
+          "slots": [],
+          "name": "ProntoParentesIntent",
+          "samples": [
+            "pronto",
+            "pode começar",
+            "começar",
+            "já cadastrei",
+            "terminar cadastro",
+            "iniciar perguntas"
+          ]
+        },
+        {
+          "slots": [],
+          "name": "ConfirmarNivelIntent",
+          "samples": [
+            "sim",
+            "quero",
+            "quero sim",
+            "claro",
+            "nível médio",
+            "nível difícil",
+            "quero continuar"
+          ]
+        },
+        {
+          "slots": [
+            {
+              "name": "resposta",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "name": "ResponderJogoIntent",
+          "samples": [
+            "eu lembro {resposta}",
+            "são {resposta}",
+            "as palavras são {resposta}",
+            "lembro de {resposta}",
+            "minha resposta é {resposta}",
+            "eu disse {resposta}",
+            "as palavras que lembro são {resposta}",
+            "vou repetir {resposta}",
+            "repetir {resposta}"
+          ]
+        },
+        {
+          "slots": [
+            {
+              "name": "resposta",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "name": "ResponderParentesIntent",
+          "samples": [
+            "a resposta é {resposta}",
+            "eu respondo {resposta}",
+            "se chama {resposta}",
+            "os nomes são {resposta}",
+            "meu filho se chama {resposta}",
+            "minha filha se chama {resposta}",
+            "o nome dele é {resposta}",
+            "o nome dela é {resposta}"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "values": [
+            { "name": { "value": "filho" } },
+            { "name": { "value": "filha" } },
+            { "name": { "value": "pai" } },
+            { "name": { "value": "mãe" } },
+            { "name": { "value": "esposa" } },
+            { "name": { "value": "marido" } },
+            { "name": { "value": "neto" } },
+            { "name": { "value": "neta" } },
+            { "name": { "value": "amigo" } },
+            { "name": { "value": "amiga" } }
+          ],
+          "name": "RELATION_TYPE"
+        }
+      ],
+      "invocationName": "teste dois"
+    }
+  }
+}

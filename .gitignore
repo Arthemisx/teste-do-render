@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.env
+.venv/
+venv/
+
+# IDE / sistema
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Banco local da API (se testar render-api no PC)
+render-api/*.db
+dona_memoria.db
+
+# Segredos (nunca subir chaves reais)
+*.pem
+secrets.json
