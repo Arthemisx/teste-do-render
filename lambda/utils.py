@@ -278,6 +278,74 @@ def obter_link_pdf(user_id):
     return f"{RENDER_API_URL}/api/users/{user_id}/pdf"
 
 
+# Dados do jogo "Qual não pertence"
+DADOS_JOGO_NAO_PERTENCE = {
+    "animais": {
+        "nome_tema": "animais",
+        "itens": [
+            {"nome": "cachorro", "imagem": "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "gato", "imagem": "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "pássaro", "imagem": "https://images.unsplash.com/photo-1444464666168-49d633b86797?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "maçã", "imagem": "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=400&fit=crop", "pertence": False}
+        ]
+    },
+    "frutas": {
+        "nome_tema": "frutas",
+        "itens": [
+            {"nome": "banana", "imagem": "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "laranja", "imagem": "https://images.unsplash.com/photo-1547514701-42782101795e?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "uva", "imagem": "https://images.unsplash.com/photo-1536304929831-ee1ca9d44906?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "carro", "imagem": "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400&h=400&fit=crop", "pertence": False}
+        ]
+    },
+    "veiculos": {
+        "nome_tema": "veículos",
+        "itens": [
+            {"nome": "carro", "imagem": "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "bicicleta", "imagem": "https://images.unsplash.com/photo-1485965120184-e224f7a1db69?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "avião", "imagem": "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "árvore", "imagem": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&h=400&fit=crop", "pertence": False}
+        ]
+    },
+    "roupas": {
+        "nome_tema": "roupas",
+        "itens": [
+            {"nome": "camisa", "imagem": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "calça", "imagem": "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "sapato", "imagem": "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "computador", "imagem": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&h=400&fit=crop", "pertence": False}
+        ]
+    },
+    "cores": {
+        "nome_tema": "cores",
+        "itens": [
+            {"nome": "vermelho", "imagem": "https://images.unsplash.com/photo-1563089145-599997674d42?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "azul", "imagem": "https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "amarelo", "imagem": "https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?w=400&h=400&fit=crop", "pertence": True},
+            {"nome": "mesa", "imagem": "https://images.unsplash.com/photo-1530018607912-eff2daa1bac4?w=400&h=400&fit=crop", "pertence": False}
+        ]
+    }
+}
+
+
+def obter_aleatorio_jogo_nao_pertence():
+    """Retorna um tema aleatório com 3 itens do tema e 1 que não pertence."""
+    import random
+    temas = list(DADOS_JOGO_NAO_PERTENCE.keys())
+    tema_escolhido = random.choice(temas)
+    dados_tema = DADOS_JOGO_NAO_PERTENCE[tema_escolhido]
+    
+    # Embaralhar os itens para o intruso não estar sempre na mesma posição
+    itens = dados_tema["itens"].copy()
+    random.shuffle(itens)
+    
+    return {
+        "tema": dados_tema["nome_tema"],
+        "itens": itens,
+        "resposta_correta": [item["nome"] for item in itens if not item["pertence"]][0]
+    }
+
+
 def adicionar_parente(people, relacao, nome):
     """Adiciona parente; permite vários nomes na mesma relação."""
     nome = nome.strip()

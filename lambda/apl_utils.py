@@ -93,6 +93,22 @@ def mostrar_tela_estatisticas(handler_input, dados_estatisticas):
     return criar_resposta_apl(handler_input, documento_apl, dados_template, "statsScreen")
 
 
+def mostrar_tela_jogo_nao_pertence(handler_input, tema, itens):
+    """Mostra tela do jogo 'Qual não pertence' no Echo Show."""
+    documento_apl = carregar_documento_apl()
+    if not documento_apl:
+        return None
+    
+    dados_template = {
+        "jogoNaoPertenceData": {
+            "tema": tema,
+            "itens": itens
+        }
+    }
+    
+    return criar_resposta_apl(handler_input, documento_apl, dados_template, "jogoNaoPertenceScreen")
+
+
 def tem_suporte_apl(handler_input):
     """Verifica se o dispositivo suporta APL (Echo Show)."""
     if not handler_input.request_envelope.context:

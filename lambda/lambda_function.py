@@ -35,6 +35,7 @@ from utils import (
     interpretar_pronto_parentes,
     montar_ssml_com_som,
     normalizar_texto,
+    obter_aleatorio_jogo_nao_pertence,
     obter_link_pdf,
     registrar_estatistica,
     render_disponivel,
@@ -46,6 +47,7 @@ from utils import (
 )
 
 from apl_utils import (
+    mostrar_tela_jogo_nao_pertence,
     mostrar_tela_principal,
     mostrar_tela_estatisticas,
     tem_suporte_apl,
@@ -1220,6 +1222,77 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
         )
 
 
+class JogoNaoPertenceHandler(AbstractRequestHandler):
+    """Handler para o jogo 'Qual não pertence'."""
+    
+    def can_handle(self, handler_input):
+        session = handler_input.attributes_manager.session_attributes
+        return (
+            ask_utils.is_intent_name("EscolherNaoPertenceIntent")(handler_input)
+            or session.get("jogo_nao_pertence_ativo", False)
+        )
+    
+    def handle(self, handler_input):
+        session = handler_input.attributes_manager.session_attributes
+        
+        # Se o jogo já está ativo, processa a resposta do usuário
+        if session.get("jogo_nao_pertence_ativo", False):
+            return self._processar_resposta(handler_input, session)
+        
+        # Inicia um novo jogo
+        return self._iniciar_jogo(handler_input, session)
+    
+    def _iniciar_jogo(self, handler_input, session):
+        """Inicia uma nova rodada do jogo."""
+        dados_jogo = obter_aleatorio_jogo_nao_pertence()
+        
+        session["jogo_nao_pertence_ativo"] = True
+        session["resposta_correta_nao_pertence"] = dados_jogo["resposta_correta"]
+        session["tema_atual"] = dados_jogo["tema"]
+        
+        # Falar os nomes dos itens para Echo Dot
+        nomes_itens = [item["nome"] for item in dados_jogo["itens"]]
+        texto_falado = (
+            f"Vamos jogar 'Qual não pertence'! O tema é {dados_jogo['tema']}. "
+            f"Olhe para as imagens e me diga qual destes itens não pertence ao tema: "
+            f"{', '.join(nomes_itens)}. "
+            "Qual você escolhe?"
+        )
+        
+        response_builder = handler_input.response_builder.speak(texto_falado).ask("Qual imagem não pertence ao tema?")
+        
+        # Mostrar imagens no Echo Show
+        if tem_suporte_apl(handler_input):
+            mostrar_tela_jogo_nao_pertence(handler_input, dados_jogo["tema"], dados_jogo["itens"])
+        
+        return response_builder.response
+    
+    def _processar_resposta(self, handler_input, session):
+        """Processa a resposta do usuário."""
+        texto_usuario = obter_texto_usuario(handler_input) or ""
+        resposta_usuario = normalizar_texto(texto_usuario)
+        resposta_correta = session.get("resposta_correta_nao_pertence", "")
+        
+        # Verificar se a resposta está correta
+        if resposta_usuario in resposta_correta or resposta_correta in resposta_usuario:
+            speak_output = "Muito bem! Você acertou! "
+            session["acertos_nao_pertence"] = session.get("acertos_nao_pertence", 0) + 1
+        else:
+            speak_output = f"Não foi dessa vez. A resposta correta era {resposta_correta}. "
+            session["erros_nao_pertence"] = session.get("erros_nao_pertence", 0) + 1
+        
+        # Pergunta se quer jogar de novo
+        session["jogo_nao_pertence_ativo"] = False
+        speak_output += "Quer jogar de novo?"
+        
+        return (
+            handler_input.response_builder
+            .speak(speak_output)
+            .ask("Diga sim para jogar de novo, ou não para sair.")
+            .response
+        )
+
+
 sb = SkillBuilder()
 
 sb.add_request_handler(LaunchRequestHandler())
@@ -1231,6 +1304,7 @@ sb.add_request_handler(JogoOrdemHandler())
 sb.add_request_handler(MenuJogoHandler())
 sb.add_request_handler(JogoParentesHandler())
 sb.add_request_handler(JogoMemoriaPrincipalHandler())
+sb.add_request_handler(JogoNaoPertenceHandler())
 sb.add_request_handler(ShowStatsHandler())
 sb.add_request_handler(GoBackHandler())
 sb.add_request_handler(ExportarRelatorioHandler())
