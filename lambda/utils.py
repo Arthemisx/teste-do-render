@@ -251,6 +251,33 @@ def salvar_dados_usuario(user_id, dados):
     return False
 
 
+def registrar_estatistica(user_id, tempo_minutos, acertos=0, erros=0):
+    """Registra estatísticas de uso na API do Render."""
+    if not user_id or not render_disponivel():
+        return False
+    try:
+        url = f"{RENDER_API_URL}/api/users/{user_id}/stats"
+        payload = {
+            "tempo": tempo_minutos,
+            "correct": acertos,
+            "wrong": erros
+        }
+        r = requests.post(url, headers=_headers_render(), json=payload, timeout=10)
+        if r.status_code == 200:
+            return True
+        logging.warning(f"Render Stats POST {r.status_code}: {r.text}")
+    except Exception as e:
+        logging.error(f"Erro ao registrar estatística: {e}")
+    return False
+
+
+def obter_link_pdf(user_id):
+    """Gera link para download do PDF de estatísticas."""
+    if not user_id or not render_disponivel():
+        return None
+    return f"{RENDER_API_URL}/api/users/{user_id}/pdf"
+
+
 def adicionar_parente(people, relacao, nome):
     """Adiciona parente; permite vários nomes na mesma relação."""
     nome = nome.strip()

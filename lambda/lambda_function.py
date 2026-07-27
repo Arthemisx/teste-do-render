@@ -35,12 +35,20 @@ from utils import (
     interpretar_pronto_parentes,
     montar_ssml_com_som,
     normalizar_texto,
+    obter_link_pdf,
+    registrar_estatistica,
     render_disponivel,
     salvar_dados_usuario,
     verificar_nome_parente,
     verificar_resposta,
     verificar_resposta_ordem,
     verificar_resposta_som,
+)
+
+from apl_utils import (
+    mostrar_tela_principal,
+    mostrar_tela_estatisticas,
+    tem_suporte_apl,
 )
 
 logger = logging.getLogger(__name__)
@@ -218,15 +226,17 @@ class LaunchRequestHandler(AbstractRequestHandler):
             "Você pode jogar memorizar palavras, o jogo de parentes, o jogo de sons "
             "ou o jogo de ordem das coisas. O que você quer jogar?"
         )
-        return (
-            handler_input.response_builder
-            .speak(speak_output)
-            .ask(
-                "Diga memorizar palavras, jogo de parentes, jogo de sons "
-                "ou jogo de ordem."
-            )
-            .response
+        
+        response_builder = handler_input.response_builder.speak(speak_output).ask(
+            "Diga memorizar palavras, jogo de parentes, jogo de sons "
+            "ou jogo de ordem."
         )
+        
+        # Mostrar interface APL se disponível
+        if tem_suporte_apl(handler_input):
+            mostrar_tela_principal(handler_input)
+        
+        return response_builder.response
 
 
 class MenuJogoHandler(AbstractRequestHandler):
@@ -1103,6 +1113,113 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
         )
 
 
+class ShowStatsHandler(AbstractRequestHandler):
+    """Handler para mostrar estatísticas quando usuário clica no botão de gráfico."""
+    
+    def can_handle(self, handler_input):
+        return (
+            ask_utils.is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input)
+            and handler_input.request_envelope.request.arguments
+            and handler_input.request_envelope.request.arguments[0] == "show_stats"
+        )
+    
+    def handle(self, handler_input):
+        user_id = obter_user_id(handler_input)
+        
+        if not user_id or not render_disponivel():
+            speak_output = "Não foi possível carregar suas estatísticas. O serviço não está disponível."
+            return handler_input.response_builder.speak(speak_output).response
+        
+        try:
+            # Carregar estatísticas da API
+            from utils import carregar_dados_usuario
+            dados = carregar_dados_usuario(user_id)
+            memoria = dados.get("memoria", {})
+            
+            tempo_total = memoria.get("tempo_total", 0)
+            daily_stats = memoria.get("estatisticas_diarias", [])
+            
+            # Só mostrar estatísticas se houver dados reais
+            if tempo_total == 0 and not daily_stats:
+                speak_output = "Você ainda não tem estatísticas registradas. Use a skill para começar a acumular dados."
+                return handler_input.response_builder.speak(speak_output).response
+            
+            dados_estatisticas = {
+                "totalTime": tempo_total,
+                "dailyStats": daily_stats
+            }
+            
+            # Mostrar tela de estatísticas no Echo Show
+            if tem_suporte_apl(handler_input):
+                mostrar_tela_estatisticas(handler_input, dados_estatisticas)
+            
+            speak_output = "Aqui estão suas estatísticas de uso."
+            return handler_input.response_builder.speak(speak_output).response
+            
+        except Exception as e:
+            logger.error(f"Erro ao carregar estatísticas: {e}")
+            speak_output = "Desculpe, ocorreu um erro ao carregar suas estatísticas. Tente novamente mais tarde."
+            return handler_input.response_builder.speak(speak_output).response
+
+
+class GoBackHandler(AbstractRequestHandler):
+    """Handler para voltar à tela principal quando usuário clica no botão de voltar."""
+    
+    def can_handle(self, handler_input):
+        return (
+            ask_utils.is_request_type("Alexa.Presentation.APL.UserEvent")(handler_input)
+            and handler_input.request_envelope.request.arguments
+            and handler_input.request_envelope.request.arguments[0] == "go_back"
+        )
+    
+    def handle(self, handler_input):
+        # Mostrar tela principal novamente
+        if tem_suporte_apl(handler_input):
+            mostrar_tela_principal(handler_input)
+        
+        speak_output = "Voltando para a tela principal."
+        return handler_input.response_builder.speak(speak_output).response
+
+
+class ExportarRelatorioHandler(AbstractRequestHandler):
+    """Handler para exportar relatório PDF quando usuário solicita."""
+    
+    def can_handle(self, handler_input):
+        return (
+            ask_utils.is_intent_name("ExportarRelatorioIntent")(handler_input)
+            or (ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input)
+                and handler_input.attributes_manager.session_attributes.get("aguardando_confirmacao_pdf"))
+        )
+    
+    def handle(self, handler_input):
+        user_id = obter_user_id(handler_input)
+        session = handler_input.attributes_manager.session_attributes
+        session["aguardando_confirmacao_pdf"] = False
+        
+        if not user_id or not render_disponivel():
+            speak_output = "Não foi possível gerar o relatório. Tente novamente mais tarde."
+            return handler_input.response_builder.speak(speak_output).response
+        
+        link_pdf = obter_link_pdf(user_id)
+        
+        if not link_pdf:
+            speak_output = "Não foi possível gerar o link do relatório."
+            return handler_input.response_builder.speak(speak_output).response
+        
+        speak_output = (
+            "Seu relatório está pronto! "
+            f"Para baixar o PDF, acesse o link no seu navegador: {link_pdf}. "
+            "Este link estará disponível por 24 horas."
+        )
+        
+        return (
+            handler_input.response_builder
+            .speak(speak_output)
+            .ask("Quer fazer mais alguma coisa?")
+            .response
+        )
+
+
 sb = SkillBuilder()
 
 sb.add_request_handler(LaunchRequestHandler())
@@ -1114,6 +1231,9 @@ sb.add_request_handler(JogoOrdemHandler())
 sb.add_request_handler(MenuJogoHandler())
 sb.add_request_handler(JogoParentesHandler())
 sb.add_request_handler(JogoMemoriaPrincipalHandler())
+sb.add_request_handler(ShowStatsHandler())
+sb.add_request_handler(GoBackHandler())
+sb.add_request_handler(ExportarRelatorioHandler())
 sb.add_request_handler(IntentReflectorHandler())
 sb.add_exception_handler(CatchAllExceptionHandler())
 
