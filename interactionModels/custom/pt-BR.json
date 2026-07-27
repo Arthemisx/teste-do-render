@@ -295,6 +295,20 @@
                         "o nome dele é {resposta}",
                         "o nome dela é {resposta}"
                     ]
+                },
+                {
+                    "name": "EscolherNaoPertenceIntent",
+                    "slots": [],
+                    "samples": [
+                        "jogo qual não pertence",
+                        "qual não pertence",
+                        "jogo do intruso",
+                        "qual imagem não pertence",
+                        "qual não faz parte",
+                        "qual não corresponde",
+                        "jogo dos diferentes",
+                        "qual é o diferente"
+                    ]
                 }
             ],
             "types": [
