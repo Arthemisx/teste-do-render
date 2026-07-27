@@ -7,12 +7,6 @@ import sqlite3
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
-import io
 
 app = Flask(__name__)
 
@@ -236,98 +230,6 @@ def registrar_estatistica(user_id):
     
     gravar_usuario(user_id, dados)
     return jsonify({"ok": True, "user_id": user_id})
-
-
-def gerar_pdf_estatisticas(user_id, dados):
-    """Gera PDF com as estatísticas do usuário."""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    
-    styles = getSampleStyleSheet()
-    story = []
-    
-    # Título
-    title = Paragraph("Relatório de Estatísticas - Dona Memória", styles["Title"])
-    story.append(title)
-    
-    # Data
-    data_relatorio = Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles["Normal"])
-    story.append(data_relatorio)
-    story.append(Paragraph("<br/><br/>", styles["Normal"]))
-    
-    # Tempo total
-    tempo_total = dados.get("tempo_total", 0)
-    tempo_texto = Paragraph(f"<b>Tempo Total de Uso:</b> {tempo_total} minutos", styles["Heading2"])
-    story.append(tempo_texto)
-    story.append(Paragraph("<br/>", styles["Normal"]))
-    
-    # Tabela de estatísticas diárias
-    daily_stats = dados.get("estatisticas_diarias", [])
-    if daily_stats:
-        cabecalho = Paragraph("<b>Estatísticas por Dia</b>", styles["Heading2"])
-        story.append(cabecalho)
-        story.append(Paragraph("<br/>", styles["Normal"]))
-        
-        # Criar tabela
-        table_data = [["Data", "Tempo (min)", "Acertos", "Erros"]]
-        for stat in daily_stats:
-            data_formatada = stat.get("date", "")
-            # Formatar data de YYYY-MM-DD para DD/MM/YYYY
-            try:
-                data_obj = datetime.strptime(data_formatada, "%Y-%m-%d")
-                data_formatada = data_obj.strftime("%d/%m/%Y")
-            except:
-                pass
-            
-            table_data.append([
-                data_formatada,
-                str(stat.get("time", 0)),
-                str(stat.get("correct", 0)),
-                str(stat.get("wrong", 0))
-            ])
-        
-        table = Table(table_data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(table)
-    else:
-        story.append(Paragraph("Nenhum dado de estatísticas disponível.", styles["Normal"]))
-    
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
-
-@app.get("/api/users/<user_id>/pdf")
-def baixar_pdf(user_id):
-    """Gera e retorna PDF das estatísticas do usuário."""
-    if not verificar_chave():
-        return resposta_nao_autorizado()
-    
-    dados = ler_usuario(user_id)
-    memoria = dados.get("memoria", {})
-    
-    try:
-        pdf_buffer = gerar_pdf_estatisticas(user_id, memoria)
-        
-        response = app.response_class(
-            pdf_buffer.read(),
-            mimetype='application/pdf',
-            headers={
-                'Content-Disposition': f'attachment; filename=relatorio-dona-memoria-{user_id}.pdf'
-            }
-        )
-        return response
-    except Exception as e:
-        return jsonify({"erro": f"Erro ao gerar PDF: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
