@@ -16,6 +16,7 @@ from ask_sdk_core.dispatch_components import AbstractExceptionHandler
 from ask_sdk_core.handler_input import HandlerInput
 
 from ask_sdk_model import Response
+from ask_sdk_model.ui import SimpleCard
 
 from utils import (
     adicionar_parente,
@@ -213,8 +214,15 @@ class LaunchRequestHandler(AbstractRequestHandler):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
 
     def handle(self, handler_input):
+        import time
         session = handler_input.attributes_manager.session_attributes
         sincronizar_dados_nuvem(handler_input, session)
+        
+        # Rastrear tempo de início da sessão
+        session["session_start_time"] = time.time()
+        session["session_acertos"] = 0
+        session["session_erros"] = 0
+        
         session["aguardando_escolha_jogo"] = True
         session["jogo_ativo"] = False
         session["parentes_ativo"] = False
@@ -226,17 +234,26 @@ class LaunchRequestHandler(AbstractRequestHandler):
         speak_output = (
             f"Olá, eu sou a Dona Memória! {extra}"
             "Você pode jogar memorizar palavras, o jogo de parentes, o jogo de sons "
-            "ou o jogo de ordem das coisas. O que você quer jogar?"
+            "ou o jogo de ordem das coisas. Você também pode acessar suas configurações "
+            "para ver suas estatísticas de uso. O que você quer fazer?"
         )
         
         response_builder = handler_input.response_builder.speak(speak_output).ask(
-            "Diga memorizar palavras, jogo de parentes, jogo de sons "
-            "ou jogo de ordem."
+            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem ou acessar configurações."
         )
         
         # Mostrar interface APL se disponível
+        logger.info(f"Verificando suporte APL...")
         if tem_suporte_apl(handler_input):
-            mostrar_tela_principal(handler_input)
+            logger.info(f"APL suportado, tentando mostrar tela principal...")
+            resposta_apl = mostrar_tela_principal(handler_input)
+            if resposta_apl:
+                logger.info(f"Resposta APL criada com sucesso")
+                response_builder = resposta_apl
+            else:
+                logger.warning(f"Resposta APL é None")
+        else:
+            logger.warning(f"APL não suportado neste dispositivo")
         
         return response_builder.response
 
@@ -246,6 +263,17 @@ class MenuJogoHandler(AbstractRequestHandler):
 
     def can_handle(self, handler_input):
         session = handler_input.attributes_manager.session_attributes
+        texto = obter_texto_usuario(handler_input).lower()
+        logger.info(f"MenuJogoHandler - texto recebido: '{texto}'")
+        
+        # Não responder se usuário pediu configurações ou exportação de PDF
+        if any(palavra in texto for palavra in ["configurações", "configuracao", "estatísticas", "estatisticas"]):
+            logger.info(f"MenuJogoHandler - detectou configurações, retornando False")
+            return False
+        if any(palavra in texto for palavra in ["exportar", "pdf", "relatório", "relatorio", "baixar"]):
+            logger.info(f"MenuJogoHandler - detectou exportação PDF, retornando False")
+            return False
+        
         return (
             ask_utils.is_intent_name("QueroJogarIntent")(handler_input)
             or ask_utils.is_intent_name("EscolherMemoriaIntent")(handler_input)
@@ -390,6 +418,9 @@ class JogoParentesHandler(AbstractRequestHandler):
             relacoes_restantes = [r for r in total_relacoes if r not in session["relacoes_perguntadas"]]
 
             if acertou:
+                # Registrar acerto nas estatísticas da sessão
+                session["session_acertos"] = session.get("session_acertos", 0) + 1
+                
                 if not relacoes_restantes:
                     # Acertou e não há mais relações - finalizar jogo
                     session["parentes_ativo"] = False
@@ -421,6 +452,9 @@ class JogoParentesHandler(AbstractRequestHandler):
                     .response
                 )
             else:
+                # Registrar erro nas estatísticas da sessão
+                session["session_erros"] = session.get("session_erros", 0) + 1
+                
                 # Errou - mostra resposta correta e repete a mesma pergunta
                 nomes_txt = " e ".join(nomes)
                 speak_output = (
@@ -646,10 +680,15 @@ class JogoSonsHandler(AbstractRequestHandler):
             session["aguardando_novo_jogo_sons"] = True
 
             if acertou:
+                # Registrar acerto nas estatísticas da sessão
+                session["session_acertos"] = session.get("session_acertos", 0) + 1
                 feedback = f"Muito bem, você acertou! Era {som_atual['nome']}."
             elif pediu_ajuda:
+                # Não conta como erro quando pediu ajuda
                 feedback = f"Sem problema! Esse som era {som_atual['nome']}."
             else:
+                # Registrar erro nas estatísticas da sessão
+                session["session_erros"] = session.get("session_erros", 0) + 1
                 feedback = f"Quase! Era {som_atual['nome']}."
 
             speak_output = (
@@ -794,10 +833,15 @@ class JogoOrdemHandler(AbstractRequestHandler):
             session["aguardando_novo_jogo_ordem"] = True
 
             if acertou:
+                # Registrar acerto nas estatísticas da sessão
+                session["session_acertos"] = session.get("session_acertos", 0) + 1
                 feedback = f"Muito bem, você acertou! A ordem correta é: {ordem_txt}."
             elif pediu_ajuda:
+                # Não conta como erro quando pediu ajuda
                 feedback = f"Sem problema! A ordem correta é: {ordem_txt}."
             else:
+                # Registrar erro nas estatísticas da sessão
+                session["session_erros"] = session.get("session_erros", 0) + 1
                 feedback = f"Quase! A ordem correta é: {ordem_txt}."
 
             speak_output = (
@@ -945,6 +989,8 @@ class JogoMemoriaPrincipalHandler(AbstractRequestHandler):
             acertou = verificar_resposta(palavras_esperadas, resposta_usuario)
 
             if acertou:
+                # Registrar acerto nas estatísticas da sessão
+                session["session_acertos"] = session.get("session_acertos", 0) + 1
                 rodada = session["rodada"]
                 nivel = session["nivel"]
 
@@ -1019,6 +1065,9 @@ class JogoMemoriaPrincipalHandler(AbstractRequestHandler):
                     .response
                 )
 
+            # Registrar erro nas estatísticas da sessão
+            session["session_erros"] = session.get("session_erros", 0) + 1
+            
             session["jogo_ativo"] = False
             session["aguardando_novo_jogo"] = True
             return (
@@ -1085,6 +1134,21 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
         return ask_utils.is_request_type("SessionEndedRequest")(handler_input)
 
     def handle(self, handler_input):
+        import time
+        session = handler_input.attributes_manager.session_attributes
+        user_id = obter_user_id(handler_input)
+        
+        # Calcular tempo de uso da sessão
+        if session.get("session_start_time") and user_id:
+            tempo_minutos = (time.time() - session["session_start_time"]) / 60
+            acertos = session.get("session_acertos", 0)
+            erros = session.get("session_erros", 0)
+            
+            # Registrar estatísticas na API do Render
+            if tempo_minutos > 0 or acertos > 0 or erros > 0:
+                registrar_estatistica(user_id, tempo_minutos, acertos, erros)
+                logger.info(f"Estatísticas registradas: tempo={tempo_minutos:.2f}min, acertos={acertos}, erros={erros}")
+        
         return handler_input.response_builder.response
 
 
@@ -1183,22 +1247,156 @@ class GoBackHandler(AbstractRequestHandler):
         return handler_input.response_builder.speak(speak_output).response
 
 
+class ConfiguracoesHandler(AbstractRequestHandler):
+    """Handler para acessar configurações e ver estatísticas."""
+    
+    def can_handle(self, handler_input):
+        session = handler_input.attributes_manager.session_attributes
+        intent_name = ask_utils.get_intent_name(handler_input)
+        logger.info(f"ConfiguracoesHandler - intent: {intent_name}, aguardando_escolha_jogo: {session.get('aguardando_escolha_jogo')}, aguardando_opcao_configuracoes: {session.get('aguardando_opcao_configuracoes')}")
+        
+        # Se estiver aguardando opção de configurações, não responder (deixa ExportarRelatorioHandler cuidar)
+        if session.get("aguardando_opcao_configuracoes"):
+            logger.info(f"ConfiguracoesHandler - aguardando_opcao_configuracoes, retornando False")
+            return False
+        
+        # Responder a intent específica de configurações
+        if ask_utils.is_intent_name("ConfiguracoesIntent")(handler_input):
+            return True
+        
+        # Se estiver no menu de escolha de jogo e não for um intent de jogo específico,
+        # pode ser uma solicitação de configurações
+        if session.get("aguardando_escolha_jogo", False):
+            intents_jogo = [
+                "QueroJogarIntent",
+                "EscolherMemoriaIntent", 
+                "EscolherParentesIntent",
+                "EscolherSonsIntent",
+                "EscolherOrdemIntent",
+                "AMAZON.YesIntent",
+                "AMAZON.NoIntent",
+                "AMAZON.CancelIntent",
+                "AMAZON.StopIntent"
+            ]
+            if intent_name not in intents_jogo:
+                logger.info(f"ConfiguracoesHandler - intent não é de jogo, pode ser configurações")
+                return True
+        
+        return False
+    
+    def handle(self, handler_input):
+        import time
+        user_id = obter_user_id(handler_input)
+        session = handler_input.attributes_manager.session_attributes
+        session["aguardando_opcao_configuracoes"] = False
+        
+        # Calcular tempo da sessão atual
+        tempo_atual = 0
+        if session.get("session_start_time"):
+            tempo_atual = (time.time() - session["session_start_time"]) / 60  # converter para minutos
+        
+        acertos_sessao = session.get("session_acertos", 0)
+        erros_sessao = session.get("session_erros", 0)
+        
+        if tempo_atual < 1:
+            tempo_str = f"{int(tempo_atual * 60)} segundos"
+        else:
+            tempo_str = f"{int(tempo_atual)} minutos"
+        
+        speak_output = (
+            f"Nas configurações você pode ver suas estatísticas. "
+            f"Nesta sessão você usou a skill por {tempo_str}, "
+            f"com {acertos_sessao} acertos e {erros_sessao} erros. "
+        )
+        
+        # Tentar carregar estatísticas históricas
+        if user_id and render_disponivel():
+            try:
+                from utils import carregar_dados_usuario
+                dados = carregar_dados_usuario(user_id)
+                memoria = dados.get("memoria", {})
+                
+                tempo_total = memoria.get("tempo_total", 0)
+                daily_stats = memoria.get("estatisticas_diarias", [])
+                
+                if tempo_total > 0:
+                    speak_output += f"Seu tempo total de uso é de {int(tempo_total)} minutos. "
+                
+                if daily_stats:
+                    hoje_stats = daily_stats[-1] if daily_stats else None
+                    if hoje_stats:
+                        speak_output += (
+                            f"Hoje você teve {hoje_stats.get('correct', 0)} acertos "
+                            f"e {hoje_stats.get('wrong', 0)} erros. "
+                        )
+            except Exception as e:
+                logger.error(f"Erro ao carregar estatísticas: {e}")
+        
+        speak_output += "Você também pode pedir para exportar um relatório em PDF. O que mais quer fazer?"
+        
+        # Definir flag para aguardar solicitação de exportação
+        session["aguardando_opcao_configuracoes"] = True
+        
+        return (
+            handler_input.response_builder
+            .speak(speak_output)
+            .ask("Quer jogar algum jogo ou exportar um relatório?")
+            .response
+        )
+
+
 class ExportarRelatorioHandler(AbstractRequestHandler):
     """Handler para exportar relatório PDF quando usuário solicita."""
     
     def can_handle(self, handler_input):
-        return (
-            ask_utils.is_intent_name("ExportarRelatorioIntent")(handler_input)
-            or (ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input)
-                and handler_input.attributes_manager.session_attributes.get("aguardando_confirmacao_pdf"))
-        )
+        session = handler_input.attributes_manager.session_attributes
+        intent_name = ask_utils.get_intent_name(handler_input)
+        
+        # Responder a intent específica de exportar relatório
+        if ask_utils.is_intent_name("ExportarRelatorioIntent")(handler_input):
+            return True
+        
+        # Se estiver aguardando confirmação de PDF
+        if session.get("aguardando_confirmacao_pdf") and ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input):
+            return True
+        
+        # Se estiver aguardando opção de configurações e não for um intent de jogo
+        if session.get("aguardando_opcao_configuracoes"):
+            intents_jogo = [
+                "QueroJogarIntent",
+                "EscolherMemoriaIntent", 
+                "EscolherParentesIntent",
+                "EscolherSonsIntent",
+                "EscolherOrdemIntent",
+                "ConfiguracoesIntent",
+                "AMAZON.CancelIntent",
+                "AMAZON.StopIntent",
+                "AMAZON.HelpIntent"
+            ]
+            if intent_name not in intents_jogo:
+                logger.info(f"ExportarRelatorioHandler - aguardando_opcao_configuracoes, intent não é de jogo: {intent_name}")
+                return True
+        
+        # Detectar palavras-chave no texto
+        texto = obter_texto_usuario(handler_input).lower()
+        logger.info(f"ExportarRelatorioHandler - intent: {intent_name}, texto: '{texto}'")
+        
+        if texto and any(palavra in texto for palavra in ["exportar", "pdf", "relatório", "relatorio", "baixar"]):
+            logger.info(f"ExportarRelatorioHandler - detectou palavra de exportação")
+            return True
+        
+        return False
     
     def handle(self, handler_input):
         user_id = obter_user_id(handler_input)
         session = handler_input.attributes_manager.session_attributes
         session["aguardando_confirmacao_pdf"] = False
+        session["aguardando_opcao_configuracoes"] = False
         
-        if not user_id or not render_disponivel():
+        logger.info(f"ExportarRelatorioHandler - user_id: {user_id}, render_disponivel: {render_disponivel()}")
+        
+        if not user_id:
+            logger.error(f"ExportarRelatorioHandler - Falha: user_id={user_id}")
             speak_output = "Não foi possível gerar o relatório. Tente novamente mais tarde."
             return handler_input.response_builder.speak(speak_output).response
         
@@ -1209,14 +1407,20 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
             return handler_input.response_builder.speak(speak_output).response
         
         speak_output = (
-            "Seu relatório está pronto! "
-            f"Para baixar o PDF, acesse o link no seu navegador: {link_pdf}. "
-            "Este link estará disponível por 24 horas."
+            "Seu relatório em PDF está pronto! "
+            "Enviei o link para o card no aplicativo Alexa do seu celular. "
+            "Abra o link no navegador e o download começará automaticamente."
         )
         
         return (
             handler_input.response_builder
             .speak(speak_output)
+            .set_card(
+                SimpleCard(
+                    title="Relatório Dona Memória (PDF)",
+                    content=f"Toque no link abaixo ou copie no navegador para baixar:\n\n{link_pdf}",
+                )
+            )
             .ask("Quer fazer mais alguma coisa?")
             .response
         )
@@ -1299,15 +1503,16 @@ sb.add_request_handler(LaunchRequestHandler())
 sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
+sb.add_request_handler(ConfiguracoesHandler())
+sb.add_request_handler(ExportarRelatorioHandler())
+sb.add_request_handler(MenuJogoHandler())
 sb.add_request_handler(JogoSonsHandler())
 sb.add_request_handler(JogoOrdemHandler())
-sb.add_request_handler(MenuJogoHandler())
 sb.add_request_handler(JogoParentesHandler())
 sb.add_request_handler(JogoMemoriaPrincipalHandler())
 sb.add_request_handler(JogoNaoPertenceHandler())
 sb.add_request_handler(ShowStatsHandler())
 sb.add_request_handler(GoBackHandler())
-sb.add_request_handler(ExportarRelatorioHandler())
 sb.add_request_handler(IntentReflectorHandler())
 sb.add_exception_handler(CatchAllExceptionHandler())
 

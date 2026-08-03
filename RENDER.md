@@ -24,26 +24,38 @@ Cada usuário tem um `user_id` único da Amazon. A API salva os parentes nesse i
 
 ## 2. Configurar a Lambda (AWS)
 
-Em **Configuration → Environment variables** da função Lambda:
+A URL e a chave da API já estão **hardcoded** em `lambda/utils.py`:
 
-| Variável | Valor |
-|----------|--------|
-| `RENDER_API_URL` | `https://sua-api.onrender.com` (sem barra no final) |
-| `RENDER_API_KEY` | mesmo valor de `API_SECRET` no Render |
+| Variável | Valor (no código) |
+|----------|-------------------|
+| `RENDER_API_URL` | `https://teste-do-render.onrender.com` |
+| `RENDER_API_KEY` | `dona-memoria-api-key-2026` |
 
-Faça deploy de `lambda_function.py` e `utils.py` atualizados.
+Se tiver acesso à Lambda, pode sobrescrever via variáveis de ambiente. Caso contrário, basta fazer deploy de `lambda_function.py` e `utils.py` atualizados.
 
-## 3. Testar a API
+## 3. Exportar PDF
+
+Peça à Alexa: **"Alexa, pedir dona memória para exportar relatório"** ou **"gerar pdf"**.
+
+A skill informará um link como:
+`https://teste-do-render.onrender.com/api/users/SEU_ID/pdf`
+
+Abra no navegador do celular ou computador para baixar o PDF.
+
+## 4. Testar a API
 
 ```bash
-curl https://SUA-URL.onrender.com/
+curl https://teste-do-render.onrender.com/
 # {"status":"ok","servico":"dona-memoria-api"}
 
-curl -H "X-API-Key: SEU_SECRET" https://SUA-URL.onrender.com/api/users/teste123
+curl -H "X-API-Key: dona-memoria-api-key-2026" https://teste-do-render.onrender.com/api/users/teste123
 # {"user_id":"teste123","dados":{"people":{},"memoria":{}}}
+
+# PDF (abre no navegador, sem chave de API):
+# https://teste-do-render.onrender.com/api/users/teste123/pdf
 ```
 
-## 4. Testar na Alexa
+## 5. Testar na Alexa
 
 1. Build do modelo `pt-BR.json`.
 2. Abra a skill → cadastre parentes → feche a skill.

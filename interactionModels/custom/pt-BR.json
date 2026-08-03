@@ -309,6 +309,44 @@
                         "jogo dos diferentes",
                         "qual é o diferente"
                     ]
+                },
+                {
+                    "name": "ConfiguracoesIntent",
+                    "slots": [],
+                    "samples": [
+                        "configurações",
+                        "configuracao",
+                        "configurações da skill",
+                        "acessar configurações",
+                        "abrir configurações",
+                        "minhas configurações",
+                        "estatísticas",
+                        "estatisticas",
+                        "ver estatísticas",
+                        "ver estatisticas",
+                        "minhas estatísticas",
+                        "minhas estatisticas"
+                    ]
+                },
+                {
+                    "name": "ExportarRelatorioIntent",
+                    "slots": [],
+                    "samples": [
+                        "exportar relatório",
+                        "exportar relatorio",
+                        "gerar pdf",
+                        "exportar pdf",
+                        "baixar pdf",
+                        "baixar relatório",
+                        "baixar relatorio",
+                        "quero um pdf",
+                        "quero o relatório",
+                        "quero o relatorio",
+                        "exportar estatísticas",
+                        "exportar estatisticas",
+                        "fazer download do relatório",
+                        "fazer download do relatorio"
+                    ]
                 }
             ],
             "types": [

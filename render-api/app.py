@@ -4,13 +4,17 @@ API Dona Memória — hospede no Render para guardar dados entre sessões da Ale
 import json
 import os
 import sqlite3
+import unicodedata
 from datetime import datetime, timezone
+from io import BytesIO
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
+from fpdf import FPDF
 
 app = Flask(__name__)
 
-API_SECRET = os.environ.get("API_SECRET", "")
+# Chave compartilhada com a Lambda (hardcoded — sem depender de env vars na AWS).
+API_SECRET = os.environ.get("API_SECRET", "dona-memoria-api-key-2026")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "dona_memoria.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
@@ -230,6 +234,98 @@ def registrar_estatistica(user_id):
     
     gravar_usuario(user_id, dados)
     return jsonify({"ok": True, "user_id": user_id})
+
+
+def _texto_pdf(texto):
+    """Remove acentos para compatibilidade com fontes PDF basicas."""
+    if not texto:
+        return ""
+    normalizado = unicodedata.normalize("NFD", str(texto))
+    return "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
+
+
+def _gerar_pdf_bytes(user_id, dados):
+    memoria = dados.get("memoria", {})
+    people = dados.get("people", {})
+    tempo_total = memoria.get("tempo_total", 0)
+    daily_stats = memoria.get("estatisticas_diarias", [])
+
+    total_acertos = sum(d.get("correct", 0) for d in daily_stats)
+    total_erros = sum(d.get("wrong", 0) for d in daily_stats)
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 12, _texto_pdf("Dona Memoria - Relatorio de Estatisticas"), ln=True)
+
+    pdf.set_font("Helvetica", size=11)
+    pdf.ln(4)
+    pdf.cell(0, 8, _texto_pdf(f"Gerado em: {datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M UTC')}"), ln=True)
+    pdf.cell(0, 8, _texto_pdf(f"Usuario: {user_id[:20]}..."), ln=True)
+
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, _texto_pdf("Resumo Geral"), ln=True)
+    pdf.set_font("Helvetica", size=11)
+    pdf.cell(0, 8, _texto_pdf(f"Tempo total de uso: {int(tempo_total)} minutos"), ln=True)
+    pdf.cell(0, 8, _texto_pdf(f"Total de acertos: {total_acertos}"), ln=True)
+    pdf.cell(0, 8, _texto_pdf(f"Total de erros: {total_erros}"), ln=True)
+
+    if people:
+        pdf.ln(6)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, _texto_pdf("Parentes Cadastrados"), ln=True)
+        pdf.set_font("Helvetica", size=11)
+        for relacao, nomes in people.items():
+            if isinstance(nomes, str):
+                nomes = [nomes]
+            nomes_str = ", ".join(nomes) if nomes else "-"
+            pdf.cell(0, 8, _texto_pdf(f"{relacao}: {nomes_str}"), ln=True)
+
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, _texto_pdf("Estatisticas Diarias"), ln=True)
+    pdf.set_font("Helvetica", size=11)
+
+    if not daily_stats:
+        pdf.cell(0, 8, _texto_pdf("Nenhuma estatistica registrada ainda."), ln=True)
+    else:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(40, 8, "Data", border=1)
+        pdf.cell(35, 8, "Tempo (min)", border=1)
+        pdf.cell(35, 8, "Acertos", border=1)
+        pdf.cell(35, 8, "Erros", border=1, ln=True)
+        pdf.set_font("Helvetica", size=10)
+        for entrada in sorted(daily_stats, key=lambda x: x.get("date", "")):
+            data = entrada.get("date", "-")
+            try:
+                data_fmt = datetime.strptime(data, "%Y-%m-%d").strftime("%d/%m/%Y")
+            except ValueError:
+                data_fmt = data
+            pdf.cell(40, 8, data_fmt, border=1)
+            pdf.cell(35, 8, str(int(entrada.get("time", 0))), border=1)
+            pdf.cell(35, 8, str(entrada.get("correct", 0)), border=1)
+            pdf.cell(35, 8, str(entrada.get("wrong", 0)), border=1, ln=True)
+
+    buffer = BytesIO()
+    pdf.output(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+@app.get("/api/users/<user_id>/pdf")
+def baixar_pdf(user_id):
+    """Gera PDF de estatisticas — acessivel pelo navegador (sem header de API key)."""
+    dados = ler_usuario(user_id)
+    buffer = _gerar_pdf_bytes(user_id, dados)
+    nome_arquivo = f"relatorio-dona-memoria-{user_id[:12]}.pdf"
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=nome_arquivo,
+    )
 
 
 if __name__ == "__main__":

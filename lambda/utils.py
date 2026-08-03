@@ -15,9 +15,11 @@ API_KEY = os.environ.get(
     "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",
 )
 
-# API no Render para memória permanente entre sessões.
-RENDER_API_URL = os.environ.get("RENDER_API_URL", "").rstrip("/")
-RENDER_API_KEY = os.environ.get("RENDER_API_KEY", "")
+# API no Render — valores fixos (sem depender de variáveis na AWS Lambda).
+RENDER_API_URL = os.environ.get(
+    "RENDER_API_URL", "https://teste-do-render.onrender.com"
+).rstrip("/")
+RENDER_API_KEY = os.environ.get("RENDER_API_KEY", "dona-memoria-api-key-2026")
 
 
 def normalizar_texto(texto):
