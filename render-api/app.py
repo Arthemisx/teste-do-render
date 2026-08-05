@@ -193,7 +193,9 @@ def registrar_estatistica(user_id):
         return resposta_nao_autorizado()
     
     body = request.get_json(silent=True) or {}
+    logging.info(f"Registrar estatística - user_id: {user_id}, body: {body}")
     dados = ler_usuario(user_id)
+    logging.info(f"Registrar estatística - dados lidos: {dados}")
     
     # Inicializar estrutura de memória se não existir
     if "memoria" not in dados:
@@ -232,7 +234,9 @@ def registrar_estatistica(user_id):
             "wrong": body.get("wrong", 0)
         })
     
+    logging.info(f"Registrar estatística - dados antes de salvar: {dados}")
     gravar_usuario(user_id, dados)
+    logging.info(f"Registrar estatística - dados salvos com sucesso")
     return jsonify({"ok": True, "user_id": user_id})
 
 
