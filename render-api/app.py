@@ -17,6 +17,7 @@ app = Flask(__name__)
 API_SECRET = os.environ.get("API_SECRET", "dona-memoria-api-key-2026")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "dona_memoria.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# DATABASE_URL = ""  # Temporariamente desabilitado para usar SQLite
 
 
 def usar_postgres():
