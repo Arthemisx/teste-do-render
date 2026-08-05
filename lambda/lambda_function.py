@@ -180,6 +180,25 @@ def iniciar_jogo_ordem(session_attrs, prefixo=""):
     )
 
 
+def iniciar_jogo_nao_pertence(session_attrs, prefixo=""):
+    session_attrs["modo_jogo"] = "nao_pertence"
+    session_attrs["jogo_nao_pertence_ativo"] = True
+    session_attrs["aguardando_escolha_jogo"] = False
+    session_attrs["acertos_nao_pertence"] = 0
+    session_attrs["erros_nao_pertence"] = 0
+    
+    dados_jogo = obter_aleatorio_jogo_nao_pertence()
+    session_attrs["resposta_correta_nao_pertence"] = dados_jogo["resposta_correta"]
+    session_attrs["tema_atual"] = dados_jogo["tema"]
+    
+    nomes_itens = [item["nome"] for item in dados_jogo["itens"]]
+    return (
+        f"{prefixo}Vamos jogar 'Qual não pertence'! O tema é {dados_jogo['tema']}. "
+        f"Qual destes itens não pertence ao tema: {', '.join(nomes_itens)}? "
+        "Qual você escolhe?"
+    )
+
+
 def iniciar_modo_parentes(session_attrs, prefixo=""):
     session_attrs["modo_jogo"] = "parentes"
     session_attrs["parentes_ativo"] = True
@@ -233,27 +252,25 @@ class LaunchRequestHandler(AbstractRequestHandler):
 
         speak_output = (
             f"Olá, eu sou a Dona Memória! {extra}"
-            "Você pode jogar memorizar palavras, o jogo de parentes, o jogo de sons "
-            "ou o jogo de ordem das coisas. Você também pode acessar suas configurações "
-            "para ver suas estatísticas de uso. O que você quer fazer?"
+            "Você pode jogar memorizar palavras, o jogo de parentes, o jogo de sons, "
+            "o jogo de ordem das coisas ou o jogo qual não pertence. "
+            "Você também pode acessar suas configurações para ver suas estatísticas de uso. "
+            "O que você quer fazer?"
         )
         
         response_builder = handler_input.response_builder.speak(speak_output).ask(
-            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem ou acessar configurações."
+            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem, jogo qual não pertence ou acessar configurações."
         )
         
-        # Mostrar interface APL se disponível
-        logger.info(f"Verificando suporte APL...")
-        if tem_suporte_apl(handler_input):
-            logger.info(f"APL suportado, tentando mostrar tela principal...")
-            resposta_apl = mostrar_tela_principal(handler_input)
-            if resposta_apl:
-                logger.info(f"Resposta APL criada com sucesso")
-                response_builder = resposta_apl
-            else:
-                logger.warning(f"Resposta APL é None")
-        else:
-            logger.warning(f"APL não suportado neste dispositivo")
+        # Mostrar interface APL se disponível (comentado temporariamente devido a timeout)
+        # logger.info(f"Verificando suporte APL...")
+        # if tem_suporte_apl(handler_input):
+        #     logger.info(f"APL suportado, tentando mostrar tela principal...")
+        #     resposta_apl = mostrar_tela_principal(handler_input)
+        #     if resposta_apl:
+        #         response_builder = resposta_apl
+        #     else:
+        #         logger.warning(f"APL não suportado neste dispositivo")
         
         return response_builder.response
 
@@ -280,6 +297,7 @@ class MenuJogoHandler(AbstractRequestHandler):
             or ask_utils.is_intent_name("EscolherParentesIntent")(handler_input)
             or ask_utils.is_intent_name("EscolherSonsIntent")(handler_input)
             or ask_utils.is_intent_name("EscolherOrdemIntent")(handler_input)
+            or ask_utils.is_intent_name("EscolherNaoPertenceIntent")(handler_input)
             or session.get("aguardando_escolha_jogo", False)
         )
 
@@ -328,6 +346,15 @@ class MenuJogoHandler(AbstractRequestHandler):
                 .response
             )
 
+        if ask_utils.is_intent_name("EscolherNaoPertenceIntent")(handler_input):
+            speak_output = iniciar_jogo_nao_pertence(session)
+            return (
+                handler_input.response_builder
+                .speak(speak_output)
+                .ask("Qual imagem não pertence ao tema?")
+                .response
+            )
+
         escolha = interpretar_escolha_jogo(obter_texto_usuario(handler_input))
         if escolha == "memoria":
             speak_output = iniciar_jogo_memoria(session)
@@ -370,14 +397,14 @@ class MenuJogoHandler(AbstractRequestHandler):
 
         session["aguardando_escolha_jogo"] = True
         speak_output = (
-            "Temos quatro jogos: memorizar palavras, jogo de parentes, jogo de sons "
-            "e jogo de ordem das coisas. Qual você quer? "
-            "Diga memorizar palavras, jogo de parentes, jogo de sons ou jogo de ordem."
+            "Temos cinco jogos: memorizar palavras, jogo de parentes, jogo de sons, "
+            "jogo de ordem das coisas e jogo qual não pertence. Qual você quer? "
+            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem ou jogo qual não pertence."
         )
         return (
             handler_input.response_builder
             .speak(speak_output)
-            .ask("Memorizar palavras, parentes, sons ou ordem?")
+            .ask("Memorizar palavras, parentes, sons, ordem ou qual não pertence?")
             .response
         )
 
@@ -1253,11 +1280,16 @@ class ConfiguracoesHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
         session = handler_input.attributes_manager.session_attributes
         intent_name = ask_utils.get_intent_name(handler_input)
-        logger.info(f"ConfiguracoesHandler - intent: {intent_name}, aguardando_escolha_jogo: {session.get('aguardando_escolha_jogo')}, aguardando_opcao_configuracoes: {session.get('aguardando_opcao_configuracoes')}")
+        logger.info(f"ConfiguracoesHandler - intent: {intent_name}, aguardando_escolha_jogo: {session.get('aguardando_escolha_jogo')}, aguardando_opcao_configuracoes: {session.get('aguardando_opcao_configuracoes')}, modo_jogo: {session.get('modo_jogo')}, jogo_nao_pertence_ativo: {session.get('jogo_nao_pertence_ativo')}")
         
         # Se estiver aguardando opção de configurações, não responder (deixa ExportarRelatorioHandler cuidar)
         if session.get("aguardando_opcao_configuracoes"):
             logger.info(f"ConfiguracoesHandler - aguardando_opcao_configuracoes, retornando False")
+            return False
+        
+        # Não interceptar se o jogo 'Qual não pertence' estiver ativo
+        if session.get("jogo_nao_pertence_ativo", False) or session.get("modo_jogo") == "nao_pertence":
+            logger.info(f"ConfiguracoesHandler - jogo 'Qual não pertence' ativo, retornando False")
             return False
         
         # Responder a intent específica de configurações
@@ -1273,14 +1305,29 @@ class ConfiguracoesHandler(AbstractRequestHandler):
                 "EscolherParentesIntent",
                 "EscolherSonsIntent",
                 "EscolherOrdemIntent",
+                "EscolherNaoPertenceIntent",
                 "AMAZON.YesIntent",
                 "AMAZON.NoIntent",
                 "AMAZON.CancelIntent",
-                "AMAZON.StopIntent"
+                "AMAZON.StopIntent",
+                "AMAZON.HelpIntent"
             ]
+            logger.info(f"ConfiguracoesHandler - intent_name: '{intent_name}', intents_jogo: {intents_jogo}")
+            # Não interceptar se não houver intent ou se for LaunchRequest
+            if not intent_name or intent_name == "LaunchRequest":
+                logger.info(f"ConfiguracoesHandler - ignorando LaunchRequest ou intent vazio")
+                return False
+            # Não interceptar se o texto contiver "qual não pertence"
+            texto = obter_texto_usuario(handler_input).lower()
+            if "não pertence" in texto or "nao pertence" in texto:
+                logger.info(f"ConfiguracoesHandler - detectou 'qual não pertence', retornando False")
+                return False
             if intent_name not in intents_jogo:
-                logger.info(f"ConfiguracoesHandler - intent não é de jogo, pode ser configurações")
+                logger.info(f"ConfiguracoesHandler - intent '{intent_name}' não está em intents_jogo, pode ser configurações")
                 return True
+            else:
+                logger.info(f"ConfiguracoesHandler - intent '{intent_name}' está em intents_jogo, retornando False")
+                return False
         
         return False
     
@@ -1352,15 +1399,11 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
         session = handler_input.attributes_manager.session_attributes
         intent_name = ask_utils.get_intent_name(handler_input)
         
-        # Responder a intent específica de exportar relatório
+        # Responder ao intent específico de exportar relatório
         if ask_utils.is_intent_name("ExportarRelatorioIntent")(handler_input):
             return True
         
-        # Se estiver aguardando confirmação de PDF
-        if session.get("aguardando_confirmacao_pdf") and ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input):
-            return True
-        
-        # Se estiver aguardando opção de configurações e não for um intent de jogo
+        # Se estiver aguardando opção de configurações, responder a intents não relacionados a jogos
         if session.get("aguardando_opcao_configuracoes"):
             intents_jogo = [
                 "QueroJogarIntent",
@@ -1368,7 +1411,9 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
                 "EscolherParentesIntent",
                 "EscolherSonsIntent",
                 "EscolherOrdemIntent",
-                "ConfiguracoesIntent",
+                "EscolherNaoPertenceIntent",
+                "AMAZON.YesIntent",
+                "AMAZON.NoIntent",
                 "AMAZON.CancelIntent",
                 "AMAZON.StopIntent",
                 "AMAZON.HelpIntent"
@@ -1377,7 +1422,7 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
                 logger.info(f"ExportarRelatorioHandler - aguardando_opcao_configuracoes, intent não é de jogo: {intent_name}")
                 return True
         
-        # Detectar palavras-chave no texto
+        # Detectar palavras-chave no texto (em qualquer momento)
         texto = obter_texto_usuario(handler_input).lower()
         logger.info(f"ExportarRelatorioHandler - intent: {intent_name}, texto: '{texto}'")
         
@@ -1406,21 +1451,18 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
             speak_output = "Não foi possível gerar o link do relatório."
             return handler_input.response_builder.speak(speak_output).response
         
+        # Converter link para minúsculas para evitar problemas
+        link_pdf_lower = link_pdf.lower()
+        
         speak_output = (
-            "Seu relatório em PDF está pronto! "
-            "Enviei o link para o card no aplicativo Alexa do seu celular. "
-            "Abra o link no navegador e o download começará automaticamente."
+            f"Seu relatório está pronto! Acesse o link no seu navegador: {link_pdf_lower}. "
+            "Se o link não funcionar, pode ser que o serviço esteja temporariamente indisponível. "
+            "Tente novamente em alguns instantes."
         )
         
         return (
             handler_input.response_builder
             .speak(speak_output)
-            .set_card(
-                SimpleCard(
-                    title="Relatório Dona Memória (PDF)",
-                    content=f"Toque no link abaixo ou copie no navegador para baixar:\n\n{link_pdf}",
-                )
-            )
             .ask("Quer fazer mais alguma coisa?")
             .response
         )
@@ -1434,16 +1476,84 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
         return (
             ask_utils.is_intent_name("EscolherNaoPertenceIntent")(handler_input)
             or session.get("jogo_nao_pertence_ativo", False)
+            or (ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input) and session.get("modo_jogo") == "nao_pertence")
+            or (ask_utils.is_intent_name("ConfirmarNivelIntent")(handler_input) and session.get("modo_jogo") == "nao_pertence")
+            or (ask_utils.is_intent_name("AMAZON.NoIntent")(handler_input) and session.get("modo_jogo") == "nao_pertence")
+            or (ask_utils.is_intent_name("RecusarIntent")(handler_input) and session.get("modo_jogo") == "nao_pertence")
+            or session.get("aguardando_resposta_jogo_nao_pertence", False)
         )
     
     def handle(self, handler_input):
         session = handler_input.attributes_manager.session_attributes
+        intent_name = ask_utils.get_intent_name(handler_input)
+        logger.info(f"JogoNaoPertenceHandler.handle - intent: {intent_name}, modo_jogo: {session.get('modo_jogo')}, jogo_nao_pertence_ativo: {session.get('jogo_nao_pertence_ativo')}")
         
-        # Se o jogo já está ativo, processa a resposta do usuário
+        # Se está aguardando resposta sobre jogar outro jogo
+        if session.get("aguardando_resposta_jogo_nao_pertence", False):
+            logger.info(f"JogoNaoPertenceHandler - aguardando resposta sobre outro jogo")
+            session["aguardando_resposta_jogo_nao_pertence"] = False
+            session["aguardando_escolha_jogo"] = True
+            texto = obter_texto_usuario(handler_input).lower()
+            
+            # Se usuário quer sair
+            if "sair" in texto or "não" in texto or "nao" in texto or "no" in texto:
+                speak_output = "Até logo! Obrigado por jogar comigo."
+                return handler_input.response_builder.speak(speak_output).response
+            
+            # Caso contrário, volta ao menu principal
+            speak_output = (
+                "Temos cinco jogos: memorizar palavras, jogo de parentes, jogo de sons, "
+                "jogo de ordem das coisas e jogo qual não pertence. Qual você quer? "
+                "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem ou jogo qual não pertence."
+            )
+            return (
+                handler_input.response_builder
+                .speak(speak_output)
+                .ask("Memorizar palavras, parentes, sons, ordem ou qual não pertence?")
+                .response
+            )
+        
+        # Se o jogo já está ativo, processa a resposta do usuário (prioridade máxima)
         if session.get("jogo_nao_pertence_ativo", False):
+            logger.info(f"JogoNaoPertenceHandler - processando resposta do usuário")
             return self._processar_resposta(handler_input, session)
         
+        # Se o usuário disse "sim" para jogar de novo
+        if (ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input) or ask_utils.is_intent_name("ConfirmarNivelIntent")(handler_input)) and session.get("modo_jogo") == "nao_pertence":
+            logger.info(f"JogoNaoPertenceHandler - usuário disse sim, iniciando novo jogo")
+            return self._iniciar_jogo(handler_input, session)
+        
+        # Se o usuário disse "não" para jogar de novo
+        if (ask_utils.is_intent_name("AMAZON.NoIntent")(handler_input) or ask_utils.is_intent_name("RecusarIntent")(handler_input)) and session.get("modo_jogo") == "nao_pertence":
+            logger.info(f"JogoNaoPertenceHandler - usuário disse não, perguntando outro jogo")
+            
+            # Registrar estatísticas antes de sair do jogo
+            import time
+            user_id = session.get("user_id")
+            if session.get("session_start_time") and user_id:
+                tempo_minutos = (time.time() - session["session_start_time"]) / 60
+                acertos = session.get("session_acertos", 0)
+                erros = session.get("session_erros", 0)
+                if tempo_minutos > 0 or acertos > 0 or erros > 0:
+                    registrar_estatistica(user_id, tempo_minutos, acertos, erros)
+                    logger.info(f"Estatísticas registradas ao sair do jogo: tempo={tempo_minutos:.2f}min, acertos={acertos}, erros={erros}")
+            
+            session["modo_jogo"] = None
+            session["aguardando_resposta_jogo_nao_pertence"] = True
+            speak_output = (
+                "Quer jogar outro jogo ou sair? "
+                "Você pode jogar memorizar palavras, jogo de parentes, jogo de sons, "
+                "jogo de ordem das coisas ou jogo qual não pertence."
+            )
+            return (
+                handler_input.response_builder
+                .speak(speak_output)
+                .ask("Diga qual jogo quer jogar ou sair.")
+                .response
+            )
+        
         # Inicia um novo jogo
+        logger.info(f"JogoNaoPertenceHandler - iniciando novo jogo")
         return self._iniciar_jogo(handler_input, session)
     
     def _iniciar_jogo(self, handler_input, session):
@@ -1458,16 +1568,15 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
         nomes_itens = [item["nome"] for item in dados_jogo["itens"]]
         texto_falado = (
             f"Vamos jogar 'Qual não pertence'! O tema é {dados_jogo['tema']}. "
-            f"Olhe para as imagens e me diga qual destes itens não pertence ao tema: "
-            f"{', '.join(nomes_itens)}. "
+            f"Qual destes itens não pertence ao tema: {', '.join(nomes_itens)}? "
             "Qual você escolhe?"
         )
         
         response_builder = handler_input.response_builder.speak(texto_falado).ask("Qual imagem não pertence ao tema?")
         
-        # Mostrar imagens no Echo Show
-        if tem_suporte_apl(handler_input):
-            mostrar_tela_jogo_nao_pertence(handler_input, dados_jogo["tema"], dados_jogo["itens"])
+        # Mostrar imagens no Echo Show (comentado temporariamente devido a timeout)
+        # if tem_suporte_apl(handler_input):
+        #     mostrar_tela_jogo_nao_pertence(handler_input, dados_jogo["tema"], dados_jogo["itens"])
         
         return response_builder.response
     
@@ -1481,12 +1590,29 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
         if resposta_usuario in resposta_correta or resposta_correta in resposta_usuario:
             speak_output = "Muito bem! Você acertou! "
             session["acertos_nao_pertence"] = session.get("acertos_nao_pertence", 0) + 1
+            session["session_acertos"] = session.get("session_acertos", 0) + 1
         else:
             speak_output = f"Não foi dessa vez. A resposta correta era {resposta_correta}. "
             session["erros_nao_pertence"] = session.get("erros_nao_pertence", 0) + 1
+            session["session_erros"] = session.get("session_erros", 0) + 1
         
-        # Pergunta se quer jogar de novo
+        # Registrar estatísticas desta rodada
+        import time
+        user_id = session.get("user_id")
+        logger.info(f"JogoNaoPertenceHandler._processar_resposta - user_id: {user_id}, session_start_time: {session.get('session_start_time')}")
+        if session.get("session_start_time") and user_id:
+            tempo_minutos = (time.time() - session["session_start_time"]) / 60
+            acertos = session.get("session_acertos", 0)
+            erros = session.get("session_erros", 0)
+            logger.info(f"JogoNaoPertenceHandler._processar_resposta - Tentando registrar: tempo={tempo_minutos:.2f}min, acertos={acertos}, erros={erros}")
+            resultado = registrar_estatistica(user_id, tempo_minutos, acertos, erros)
+            logger.info(f"JogoNaoPertenceHandler._processar_resposta - Resultado do registro: {resultado}")
+        else:
+            logger.warning(f"JogoNaoPertenceHandler._processar_resposta - Não foi possível registrar: user_id={user_id}, session_start_time={session.get('session_start_time')}")
+        
+        # Pergunta se quer jogar de novo (define modo_jogo e desativa jogo ativo)
         session["jogo_nao_pertence_ativo"] = False
+        session["modo_jogo"] = "nao_pertence"
         speak_output += "Quer jogar de novo?"
         
         return (
@@ -1505,12 +1631,12 @@ sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
 sb.add_request_handler(ConfiguracoesHandler())
 sb.add_request_handler(ExportarRelatorioHandler())
-sb.add_request_handler(MenuJogoHandler())
 sb.add_request_handler(JogoSonsHandler())
 sb.add_request_handler(JogoOrdemHandler())
 sb.add_request_handler(JogoParentesHandler())
 sb.add_request_handler(JogoMemoriaPrincipalHandler())
 sb.add_request_handler(JogoNaoPertenceHandler())
+sb.add_request_handler(MenuJogoHandler())
 sb.add_request_handler(ShowStatsHandler())
 sb.add_request_handler(GoBackHandler())
 sb.add_request_handler(IntentReflectorHandler())

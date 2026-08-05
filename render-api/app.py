@@ -317,15 +317,19 @@ def _gerar_pdf_bytes(user_id, dados):
 @app.get("/api/users/<user_id>/pdf")
 def baixar_pdf(user_id):
     """Gera PDF de estatisticas — acessivel pelo navegador (sem header de API key)."""
-    dados = ler_usuario(user_id)
-    buffer = _gerar_pdf_bytes(user_id, dados)
-    nome_arquivo = f"relatorio-dona-memoria-{user_id[:12]}.pdf"
-    return send_file(
-        buffer,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=nome_arquivo,
-    )
+    try:
+        dados = ler_usuario(user_id)
+        buffer = _gerar_pdf_bytes(user_id, dados)
+        nome_arquivo = f"relatorio-dona-memoria-{user_id[:12]}.pdf"
+        return send_file(
+            buffer,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=nome_arquivo,
+        )
+    except Exception as e:
+        logging.error(f"Erro ao gerar PDF para user_id {user_id}: {e}")
+        return jsonify({"erro": f"Erro ao gerar PDF: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
