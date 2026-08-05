@@ -57,6 +57,99 @@
       ]
     }
   },
+  "mainTemplate": {
+    "parameters": [
+      "payload"
+    ],
+    "items": [
+      {
+        "type": "Container",
+        "width": "100%",
+        "height": "100%",
+        "items": [
+          {
+            "type": "Container",
+            "position": "absolute",
+            "left": "20dp",
+            "top": "20dp",
+            "width": "60dp",
+            "height": "60dp",
+            "items": [
+              {
+                "when": "${payload.mainScreenData.showStatsButton}",
+                "type": "TouchWrapper",
+                "id": "statsButton",
+                "onPress": {
+                  "type": "SendEvent",
+                  "arguments": [
+                    "show_stats"
+                  ]
+                },
+                "item": {
+                  "type": "Frame",
+                  "width": "60dp",
+                  "height": "60dp",
+                  "backgroundColor": "#FFFFFF",
+                  "borderRadius": "30dp",
+                  "item": {
+                    "type": "VectorGraphic",
+                    "source": "chartIcon"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "Container",
+            "width": "100%",
+            "height": "100%",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "padding": "40dp",
+            "items": [
+              {
+                "type": "Container",
+                "width": "90%",
+                "backgroundColor": "#FFFFFF",
+                "borderRadius": "20dp",
+                "padding": "40dp",
+                "shadow": {
+                  "horizontalOffset": 0,
+                  "verticalOffset": 10,
+                  "radius": 20,
+                  "color": "#40000000"
+                },
+                "items": [
+                  {
+                    "type": "Text",
+                    "text": "${payload.mainScreenData.title}",
+                    "style": "titleStyle",
+                    "textAlign": "center",
+                    "textAlignVertical": "center"
+                  },
+                  {
+                    "type": "Text",
+                    "text": "${payload.mainScreenData.subtitle}",
+                    "style": "subtitleStyle",
+                    "textAlign": "center",
+                    "marginTop": "20dp"
+                  },
+                  {
+                    "type": "Text",
+                    "text": "${payload.mainScreenData.description}",
+                    "style": "textStyle",
+                    "multiline": true,
+                    "marginTop": "30dp",
+                    "textAlign": "center"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
   "layouts": {
     "MainScreen": {
       "parameters": [

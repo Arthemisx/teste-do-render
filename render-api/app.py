@@ -2,6 +2,7 @@
 API Dona Memória — hospede no Render para guardar dados entre sessões da Alexa.
 """
 import json
+import logging
 import os
 import sqlite3
 import unicodedata
@@ -155,11 +156,21 @@ def salvar_dados(user_id):
     if not verificar_chave():
         return resposta_nao_autorizado()
     body = request.get_json(silent=True) or {}
-    dados = body.get("dados", body)
-    if "people" not in dados:
-        dados.setdefault("people", {})
-    if "memoria" not in dados:
-        dados.setdefault("memoria", {})
+    novos = body.get("dados", body)
+    existentes = ler_usuario(user_id)
+
+    people = {**existentes.get("people", {}), **novos.get("people", {})}
+    memoria_existente = existentes.get("memoria", {})
+    memoria_nova = novos.get("memoria", {})
+    memoria = {**memoria_existente, **memoria_nova}
+
+    # Estatisticas sao gerenciadas via POST /stats — nunca sobrescrever no PUT
+    if "tempo_total" in memoria_existente:
+        memoria["tempo_total"] = memoria_existente["tempo_total"]
+    if "estatisticas_diarias" in memoria_existente:
+        memoria["estatisticas_diarias"] = memoria_existente["estatisticas_diarias"]
+
+    dados = {"people": people, "memoria": memoria}
     gravar_usuario(user_id, dados)
     return jsonify({"ok": True, "user_id": user_id})
 
@@ -248,6 +259,21 @@ def _texto_pdf(texto):
     return "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
 
 
+def _formatar_tempo_minutos(minutos):
+    """Formata minutos para exibicao no PDF (inclui segundos quando < 1 min)."""
+    minutos = float(minutos or 0)
+    if minutos <= 0:
+        return "0 seg"
+    if minutos < 1:
+        seg = max(1, round(minutos * 60))
+        return f"{seg} seg"
+    mins = int(minutos)
+    segs = round((minutos - mins) * 60)
+    if segs:
+        return f"{mins} min {segs} seg"
+    return f"{mins} min"
+
+
 def _gerar_pdf_bytes(user_id, dados):
     memoria = dados.get("memoria", {})
     people = dados.get("people", {})
@@ -272,7 +298,7 @@ def _gerar_pdf_bytes(user_id, dados):
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(0, 10, _texto_pdf("Resumo Geral"), ln=True)
     pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 8, _texto_pdf(f"Tempo total de uso: {int(tempo_total)} minutos"), ln=True)
+    pdf.cell(0, 8, _texto_pdf(f"Tempo total de uso: {_formatar_tempo_minutos(tempo_total)}"), ln=True)
     pdf.cell(0, 8, _texto_pdf(f"Total de acertos: {total_acertos}"), ln=True)
     pdf.cell(0, 8, _texto_pdf(f"Total de erros: {total_erros}"), ln=True)
 
@@ -297,7 +323,7 @@ def _gerar_pdf_bytes(user_id, dados):
     else:
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(40, 8, "Data", border=1)
-        pdf.cell(35, 8, "Tempo (min)", border=1)
+        pdf.cell(35, 8, "Tempo", border=1)
         pdf.cell(35, 8, "Acertos", border=1)
         pdf.cell(35, 8, "Erros", border=1, ln=True)
         pdf.set_font("Helvetica", size=10)
@@ -308,7 +334,7 @@ def _gerar_pdf_bytes(user_id, dados):
             except ValueError:
                 data_fmt = data
             pdf.cell(40, 8, data_fmt, border=1)
-            pdf.cell(35, 8, str(int(entrada.get("time", 0))), border=1)
+            pdf.cell(35, 8, _formatar_tempo_minutos(entrada.get("time", 0)), border=1)
             pdf.cell(35, 8, str(entrada.get("correct", 0)), border=1)
             pdf.cell(35, 8, str(entrada.get("wrong", 0)), border=1, ln=True)
 

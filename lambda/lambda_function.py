@@ -8,6 +8,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import time
 import ask_sdk_core.utils as ask_utils
 
 from ask_sdk_core.skill_builder import SkillBuilder
@@ -89,6 +90,39 @@ def salvar_na_nuvem(session):
         "memoria": session.get("memoria_salva", {}),
     }
     salvar_dados_usuario(user_id, payload)
+
+
+def flush_session_stats(session, user_id):
+    """Envia ao banco apenas estatisticas ainda nao registradas desta sessao."""
+    if not user_id or not session.get("session_start_time"):
+        return False
+
+    tempo_atual = (time.time() - session["session_start_time"]) / 60
+    acertos_atual = session.get("session_acertos", 0)
+    erros_atual = session.get("session_erros", 0)
+
+    tempo_delta = tempo_atual - session.get("stats_flush_tempo", 0)
+    acertos_delta = acertos_atual - session.get("stats_flush_acertos", 0)
+    erros_delta = erros_atual - session.get("stats_flush_erros", 0)
+
+    if tempo_delta <= 0 and acertos_delta <= 0 and erros_delta <= 0:
+        return False
+
+    if registrar_estatistica(
+        user_id,
+        max(0, tempo_delta),
+        max(0, acertos_delta),
+        max(0, erros_delta),
+    ):
+        session["stats_flush_tempo"] = tempo_atual
+        session["stats_flush_acertos"] = acertos_atual
+        session["stats_flush_erros"] = erros_atual
+        logger.info(
+            f"Estatisticas registradas: tempo={tempo_delta:.2f}min, "
+            f"acertos={acertos_delta}, erros={erros_delta}"
+        )
+        return True
+    return False
 
 
 def obter_texto_usuario(handler_input):
@@ -233,14 +267,16 @@ class LaunchRequestHandler(AbstractRequestHandler):
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
 
     def handle(self, handler_input):
-        import time
         session = handler_input.attributes_manager.session_attributes
         sincronizar_dados_nuvem(handler_input, session)
-        
+
         # Rastrear tempo de início da sessão
         session["session_start_time"] = time.time()
         session["session_acertos"] = 0
         session["session_erros"] = 0
+        session["stats_flush_tempo"] = 0
+        session["stats_flush_acertos"] = 0
+        session["stats_flush_erros"] = 0
         
         session["aguardando_escolha_jogo"] = True
         session["jogo_ativo"] = False
@@ -1161,21 +1197,9 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
         return ask_utils.is_request_type("SessionEndedRequest")(handler_input)
 
     def handle(self, handler_input):
-        import time
         session = handler_input.attributes_manager.session_attributes
         user_id = obter_user_id(handler_input)
-        
-        # Calcular tempo de uso da sessão
-        if session.get("session_start_time") and user_id:
-            tempo_minutos = (time.time() - session["session_start_time"]) / 60
-            acertos = session.get("session_acertos", 0)
-            erros = session.get("session_erros", 0)
-            
-            # Registrar estatísticas na API do Render
-            if tempo_minutos > 0 or acertos > 0 or erros > 0:
-                registrar_estatistica(user_id, tempo_minutos, acertos, erros)
-                logger.info(f"Estatísticas registradas: tempo={tempo_minutos:.2f}min, acertos={acertos}, erros={erros}")
-        
+        flush_session_stats(session, user_id)
         return handler_input.response_builder.response
 
 
@@ -1332,11 +1356,10 @@ class ConfiguracoesHandler(AbstractRequestHandler):
         return False
     
     def handle(self, handler_input):
-        import time
         user_id = obter_user_id(handler_input)
         session = handler_input.attributes_manager.session_attributes
         session["aguardando_opcao_configuracoes"] = False
-        
+
         # Calcular tempo da sessão atual
         tempo_atual = 0
         if session.get("session_start_time"):
@@ -1437,14 +1460,16 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
         session = handler_input.attributes_manager.session_attributes
         session["aguardando_confirmacao_pdf"] = False
         session["aguardando_opcao_configuracoes"] = False
-        
+
         logger.info(f"ExportarRelatorioHandler - user_id: {user_id}, render_disponivel: {render_disponivel()}")
-        
+
         if not user_id:
             logger.error(f"ExportarRelatorioHandler - Falha: user_id={user_id}")
             speak_output = "Não foi possível gerar o relatório. Tente novamente mais tarde."
             return handler_input.response_builder.speak(speak_output).response
-        
+
+        flush_session_stats(session, user_id)
+
         link_pdf = obter_link_pdf(user_id)
         
         if not link_pdf:
@@ -1528,15 +1553,8 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
             logger.info(f"JogoNaoPertenceHandler - usuário disse não, perguntando outro jogo")
             
             # Registrar estatísticas antes de sair do jogo
-            import time
             user_id = session.get("user_id")
-            if session.get("session_start_time") and user_id:
-                tempo_minutos = (time.time() - session["session_start_time"]) / 60
-                acertos = session.get("session_acertos", 0)
-                erros = session.get("session_erros", 0)
-                if tempo_minutos > 0 or acertos > 0 or erros > 0:
-                    registrar_estatistica(user_id, tempo_minutos, acertos, erros)
-                    logger.info(f"Estatísticas registradas ao sair do jogo: tempo={tempo_minutos:.2f}min, acertos={acertos}, erros={erros}")
+            flush_session_stats(session, user_id)
             
             session["modo_jogo"] = None
             session["aguardando_resposta_jogo_nao_pertence"] = True
@@ -1596,19 +1614,13 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
             session["erros_nao_pertence"] = session.get("erros_nao_pertence", 0) + 1
             session["session_erros"] = session.get("session_erros", 0) + 1
         
-        # Registrar estatísticas desta rodada
-        import time
+        # Registrar estatisticas desta rodada (apenas delta desde ultimo flush)
         user_id = session.get("user_id")
-        logger.info(f"JogoNaoPertenceHandler._processar_resposta - user_id: {user_id}, session_start_time: {session.get('session_start_time')}")
-        if session.get("session_start_time") and user_id:
-            tempo_minutos = (time.time() - session["session_start_time"]) / 60
-            acertos = session.get("session_acertos", 0)
-            erros = session.get("session_erros", 0)
-            logger.info(f"JogoNaoPertenceHandler._processar_resposta - Tentando registrar: tempo={tempo_minutos:.2f}min, acertos={acertos}, erros={erros}")
-            resultado = registrar_estatistica(user_id, tempo_minutos, acertos, erros)
-            logger.info(f"JogoNaoPertenceHandler._processar_resposta - Resultado do registro: {resultado}")
-        else:
-            logger.warning(f"JogoNaoPertenceHandler._processar_resposta - Não foi possível registrar: user_id={user_id}, session_start_time={session.get('session_start_time')}")
+        logger.info(
+            f"JogoNaoPertenceHandler._processar_resposta - user_id: {user_id}, "
+            f"session_start_time: {session.get('session_start_time')}"
+        )
+        flush_session_stats(session, user_id)
         
         # Pergunta se quer jogar de novo (define modo_jogo e desativa jogo ativo)
         session["jogo_nao_pertence_ativo"] = False
