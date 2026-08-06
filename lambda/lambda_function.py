@@ -80,6 +80,18 @@ def sincronizar_dados_nuvem(handler_input, session):
         session["memoria_salva"] = dados.get("memoria", {})
 
 
+def registrar_acerto_sessao(session, contexto=""):
+    """Registra um acerto nas estatísticas da sessão."""
+    session["session_acertos"] = session.get("session_acertos", 0) + 1
+    logger.info(f"Acerto registrado {contexto}: session_acertos={session['session_acertos']}")
+
+
+def registrar_erro_sessao(session, contexto=""):
+    """Registra um erro nas estatísticas da sessão."""
+    session["session_erros"] = session.get("session_erros", 0) + 1
+    logger.info(f"Erro registrado {contexto}: session_erros={session['session_erros']}")
+
+
 def salvar_na_nuvem(session):
     """Persiste dados atuais no Render."""
     user_id = session.get("user_id")
@@ -92,37 +104,63 @@ def salvar_na_nuvem(session):
     salvar_dados_usuario(user_id, payload)
 
 
-def flush_session_stats(session, user_id):
-    """Envia ao banco apenas estatisticas ainda nao registradas desta sessao."""
+def flush_session_stats(session, user_id, forcar_flush_completo=False):
+    """Envia ao banco apenas estatisticas ainda nao registradas desta sessao.
+    
+    Args:
+        session: Sessão atual da Alexa
+        user_id: ID do usuário
+        forcar_flush_completo: Se True, envia todas as estatísticas da sessão (não apenas deltas)
+    """
     if not user_id or not session.get("session_start_time"):
+        logger.warning(f"flush_session_stats: user_id={user_id}, session_start_time={session.get('session_start_time')}")
         return False
 
     tempo_atual = (time.time() - session["session_start_time"]) / 60
     acertos_atual = session.get("session_acertos", 0)
     erros_atual = session.get("session_erros", 0)
 
-    tempo_delta = tempo_atual - session.get("stats_flush_tempo", 0)
-    acertos_delta = acertos_atual - session.get("stats_flush_acertos", 0)
-    erros_delta = erros_atual - session.get("stats_flush_erros", 0)
+    logger.info(f"flush_session_stats: tempo_atual={tempo_atual:.2f}min, acertos_atual={acertos_atual}, erros_atual={erros_atual}")
 
-    if tempo_delta <= 0 and acertos_delta <= 0 and erros_delta <= 0:
-        return False
+    if forcar_flush_completo:
+        # Envia todas as estatísticas da sessão (útil antes de gerar PDF)
+        tempo_para_enviar = tempo_atual
+        acertos_para_enviar = acertos_atual
+        erros_para_enviar = erros_atual
+        logger.info(f"flush_session_stats: forçando flush completo - tempo={tempo_para_enviar:.2f}min, acertos={acertos_para_enviar}, erros={erros_para_enviar}")
+    else:
+        # Envia apenas os deltas (diferenças desde o último flush)
+        tempo_delta = tempo_atual - session.get("stats_flush_tempo", 0)
+        acertos_delta = acertos_atual - session.get("stats_flush_acertos", 0)
+        erros_delta = erros_atual - session.get("stats_flush_erros", 0)
+
+        logger.info(f"flush_session_stats: deltas - tempo={tempo_delta:.2f}min, acertos={acertos_delta}, erros={erros_delta}")
+
+        if tempo_delta <= 0 and acertos_delta <= 0 and erros_delta <= 0:
+            logger.info("flush_session_stats: todos os deltas são zero, nada para enviar")
+            return False
+
+        tempo_para_enviar = max(0, tempo_delta)
+        acertos_para_enviar = max(0, acertos_delta)
+        erros_para_enviar = max(0, erros_delta)
 
     if registrar_estatistica(
         user_id,
-        max(0, tempo_delta),
-        max(0, acertos_delta),
-        max(0, erros_delta),
+        tempo_para_enviar,
+        acertos_para_enviar,
+        erros_para_enviar,
     ):
         session["stats_flush_tempo"] = tempo_atual
         session["stats_flush_acertos"] = acertos_atual
         session["stats_flush_erros"] = erros_atual
         logger.info(
-            f"Estatisticas registradas: tempo={tempo_delta:.2f}min, "
-            f"acertos={acertos_delta}, erros={erros_delta}"
+            f"Estatisticas registradas com sucesso: tempo={tempo_para_enviar:.2f}min, "
+            f"acertos={acertos_para_enviar}, erros={erros_para_enviar}"
         )
         return True
-    return False
+    else:
+        logger.error("Falha ao registrar estatísticas via API")
+        return False
 
 
 def obter_texto_usuario(handler_input):
@@ -482,7 +520,7 @@ class JogoParentesHandler(AbstractRequestHandler):
 
             if acertou:
                 # Registrar acerto nas estatísticas da sessão
-                session["session_acertos"] = session.get("session_acertos", 0) + 1
+                registrar_acerto_sessao(session, "no jogo de parentes")
                 
                 if not relacoes_restantes:
                     # Acertou e não há mais relações - finalizar jogo
@@ -516,7 +554,7 @@ class JogoParentesHandler(AbstractRequestHandler):
                 )
             else:
                 # Registrar erro nas estatísticas da sessão
-                session["session_erros"] = session.get("session_erros", 0) + 1
+                registrar_erro_sessao(session, "no jogo de parentes")
                 
                 # Errou - mostra resposta correta e repete a mesma pergunta
                 nomes_txt = " e ".join(nomes)
@@ -744,14 +782,14 @@ class JogoSonsHandler(AbstractRequestHandler):
 
             if acertou:
                 # Registrar acerto nas estatísticas da sessão
-                session["session_acertos"] = session.get("session_acertos", 0) + 1
+                registrar_acerto_sessao(session, "no jogo de parentes")
                 feedback = f"Muito bem, você acertou! Era {som_atual['nome']}."
             elif pediu_ajuda:
                 # Não conta como erro quando pediu ajuda
                 feedback = f"Sem problema! Esse som era {som_atual['nome']}."
             else:
                 # Registrar erro nas estatísticas da sessão
-                session["session_erros"] = session.get("session_erros", 0) + 1
+                registrar_erro_sessao(session, "no jogo de parentes")
                 feedback = f"Quase! Era {som_atual['nome']}."
 
             speak_output = (
@@ -897,14 +935,14 @@ class JogoOrdemHandler(AbstractRequestHandler):
 
             if acertou:
                 # Registrar acerto nas estatísticas da sessão
-                session["session_acertos"] = session.get("session_acertos", 0) + 1
+                registrar_acerto_sessao(session, "no jogo de parentes")
                 feedback = f"Muito bem, você acertou! A ordem correta é: {ordem_txt}."
             elif pediu_ajuda:
                 # Não conta como erro quando pediu ajuda
                 feedback = f"Sem problema! A ordem correta é: {ordem_txt}."
             else:
                 # Registrar erro nas estatísticas da sessão
-                session["session_erros"] = session.get("session_erros", 0) + 1
+                registrar_erro_sessao(session, "no jogo de parentes")
                 feedback = f"Quase! A ordem correta é: {ordem_txt}."
 
             speak_output = (
@@ -1053,7 +1091,7 @@ class JogoMemoriaPrincipalHandler(AbstractRequestHandler):
 
             if acertou:
                 # Registrar acerto nas estatísticas da sessão
-                session["session_acertos"] = session.get("session_acertos", 0) + 1
+                registrar_acerto_sessao(session, "no jogo de parentes")
                 rodada = session["rodada"]
                 nivel = session["nivel"]
 
@@ -1468,19 +1506,18 @@ class ExportarRelatorioHandler(AbstractRequestHandler):
             speak_output = "Não foi possível gerar o relatório. Tente novamente mais tarde."
             return handler_input.response_builder.speak(speak_output).response
 
-        flush_session_stats(session, user_id)
+        # Força o envio completo de todas as estatísticas da sessão antes de gerar o PDF
+        flush_session_stats(session, user_id, forcar_flush_completo=True)
 
         link_pdf = obter_link_pdf(user_id)
+        logger.info(f"ExportarRelatorioHandler - link PDF gerado: {link_pdf}")
         
         if not link_pdf:
             speak_output = "Não foi possível gerar o link do relatório."
             return handler_input.response_builder.speak(speak_output).response
         
-        # Converter link para minúsculas para evitar problemas
-        link_pdf_lower = link_pdf.lower()
-        
         speak_output = (
-            f"Seu relatório está pronto! Acesse o link no seu navegador: {link_pdf_lower}. "
+            f"Seu relatório está pronto! Acesse o link no seu navegador: {link_pdf}. "
             "Se o link não funcionar, pode ser que o serviço esteja temporariamente indisponível. "
             "Tente novamente em alguns instantes."
         )
@@ -1592,9 +1629,11 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
         
         response_builder = handler_input.response_builder.speak(texto_falado).ask("Qual imagem não pertence ao tema?")
         
-        # Mostrar imagens no Echo Show (comentado temporariamente devido a timeout)
-        # if tem_suporte_apl(handler_input):
-        #     mostrar_tela_jogo_nao_pertence(handler_input, dados_jogo["tema"], dados_jogo["itens"])
+        # Mostrar imagens no Echo Show
+        if tem_suporte_apl(handler_input):
+            resposta_apl = mostrar_tela_jogo_nao_pertence(handler_input, dados_jogo["tema"], dados_jogo["itens"])
+            if resposta_apl:
+                response_builder = resposta_apl.speak(texto_falado).ask("Qual imagem não pertence ao tema?")
         
         return response_builder.response
     

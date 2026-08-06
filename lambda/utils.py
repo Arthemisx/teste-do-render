@@ -256,6 +256,7 @@ def salvar_dados_usuario(user_id, dados):
 def registrar_estatistica(user_id, tempo_minutos, acertos=0, erros=0):
     """Registra estatísticas de uso na API do Render."""
     if not user_id or not render_disponivel():
+        logging.warning(f"registrar_estatistica: user_id={user_id}, render_disponivel={render_disponivel()}")
         return False
     try:
         url = f"{RENDER_API_URL}/api/users/{user_id}/stats"
@@ -264,7 +265,9 @@ def registrar_estatistica(user_id, tempo_minutos, acertos=0, erros=0):
             "correct": acertos,
             "wrong": erros
         }
+        logging.info(f"registrar_estatistica: enviando para {url} - payload: {payload}")
         r = requests.post(url, headers=_headers_render(), json=payload, timeout=10)
+        logging.info(f"registrar_estatistica: resposta status={r.status_code}, body={r.text}")
         if r.status_code == 200:
             return True
         logging.warning(f"Render Stats POST {r.status_code}: {r.text}")
