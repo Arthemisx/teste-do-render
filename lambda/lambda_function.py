@@ -46,6 +46,8 @@ from utils import (
     verificar_resposta,
     verificar_resposta_ordem,
     verificar_resposta_som,
+    gerar_pergunta_conta,
+    verificar_resposta_conta,
 )
 
 from apl_utils import (
@@ -164,7 +166,9 @@ def flush_session_stats(session, user_id, forcar_flush_completo=False):
 
 
 def obter_texto_usuario(handler_input):
+    logger.info(f"obter_texto_usuario - início da função")
     texto = extrair_texto_usuario_alexa(handler_input)
+    logger.info(f"obter_texto_usuario - extrair_texto_usuario_alexa retornou: '{texto}'")
     if texto:
         return texto
 
@@ -173,6 +177,22 @@ def obter_texto_usuario(handler_input):
     if person_name and relation:
         return f"{person_name} {relation}"
 
+    # Tentar extrair de qualquer slot disponível (útil para jogo de contas)
+    request = handler_input.request_envelope.request
+    if hasattr(request, "intent") and request.intent and request.intent.slots:
+        logger.info(f"obter_texto_usuario - verificando slots do intent")
+        for slot_name, slot in request.intent.slots.items():
+            if slot and slot.value:
+                logger.info(f"obter_texto_usuario - slot '{slot_name}': '{slot.value}'")
+                return slot.value.strip()
+
+    # Verificar slot específico para jogo de contas
+    resposta_conta = ask_utils.get_slot_value(handler_input=handler_input, slot_name="respostaConta") or ""
+    if resposta_conta:
+        logger.info(f"obter_texto_usuario - slot respostaConta: '{resposta_conta}'")
+        return resposta_conta.strip()
+
+    logger.info(f"obter_texto_usuario - retornando string vazia")
     return ""
 
 
@@ -327,13 +347,13 @@ class LaunchRequestHandler(AbstractRequestHandler):
         speak_output = (
             f"Olá, eu sou a Dona Memória! {extra}"
             "Você pode jogar memorizar palavras, o jogo de parentes, o jogo de sons, "
-            "o jogo de ordem das coisas ou o jogo qual não pertence. "
+            "o jogo de ordem das coisas, o jogo qual não pertence ou o jogo de contas. "
             "Você também pode acessar suas configurações para ver suas estatísticas de uso. "
             "O que você quer fazer?"
         )
         
         response_builder = handler_input.response_builder.speak(speak_output).ask(
-            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem, jogo qual não pertence ou acessar configurações."
+            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem, jogo qual não pertence, jogo de contas ou acessar configurações."
         )
         
         # Mostrar interface APL se disponível (comentado temporariamente devido a timeout)
@@ -471,9 +491,9 @@ class MenuJogoHandler(AbstractRequestHandler):
 
         session["aguardando_escolha_jogo"] = True
         speak_output = (
-            "Temos cinco jogos: memorizar palavras, jogo de parentes, jogo de sons, "
-            "jogo de ordem das coisas e jogo qual não pertence. Qual você quer? "
-            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem ou jogo qual não pertence."
+            "Temos seis jogos: memorizar palavras, jogo de parentes, jogo de sons, "
+            "jogo de ordem das coisas, jogo qual não pertence e jogo de contas. Qual você quer? "
+            "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem, jogo qual não pertence ou jogo de contas."
         )
         return (
             handler_input.response_builder
@@ -1354,6 +1374,11 @@ class ConfiguracoesHandler(AbstractRequestHandler):
             logger.info(f"ConfiguracoesHandler - jogo 'Qual não pertence' ativo, retornando False")
             return False
         
+        # Não interceptar se o jogo de contas estiver ativo
+        if session.get("jogo_contas_ativo", False) or session.get("modo_jogo") == "contas":
+            logger.info(f"ConfiguracoesHandler - jogo de contas ativo, retornando False")
+            return False
+        
         # Responder a intent específica de configurações
         if ask_utils.is_intent_name("ConfiguracoesIntent")(handler_input):
             return True
@@ -1368,6 +1393,7 @@ class ConfiguracoesHandler(AbstractRequestHandler):
                 "EscolherSonsIntent",
                 "EscolherOrdemIntent",
                 "EscolherNaoPertenceIntent",
+                "EscolherContasIntent",
                 "AMAZON.YesIntent",
                 "AMAZON.NoIntent",
                 "AMAZON.CancelIntent",
@@ -1383,6 +1409,10 @@ class ConfiguracoesHandler(AbstractRequestHandler):
             texto = obter_texto_usuario(handler_input).lower()
             if "não pertence" in texto or "nao pertence" in texto:
                 logger.info(f"ConfiguracoesHandler - detectou 'qual não pertence', retornando False")
+                return False
+            # Não interceptar se o texto contiver "contas"
+            if "contas" in texto or "matemática" in texto or "matematica" in texto:
+                logger.info(f"ConfiguracoesHandler - detectou 'contas', retornando False")
                 return False
             if intent_name not in intents_jogo:
                 logger.info(f"ConfiguracoesHandler - intent '{intent_name}' não está em intents_jogo, pode ser configurações")
@@ -1564,7 +1594,7 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
             
             # Caso contrário, volta ao menu principal
             speak_output = (
-                "Temos cinco jogos: memorizar palavras, jogo de parentes, jogo de sons, "
+                "Temos seis jogos: memorizar palavras, jogo de parentes, jogo de sons, "
                 "jogo de ordem das coisas e jogo qual não pertence. Qual você quer? "
                 "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem ou jogo qual não pertence."
             )
@@ -1674,6 +1704,145 @@ class JogoNaoPertenceHandler(AbstractRequestHandler):
         )
 
 
+class JogoContasHandler(AbstractRequestHandler):
+    """Handler para o jogo de contas matemáticas."""
+    
+    def can_handle(self, handler_input):
+        session = handler_input.attributes_manager.session_attributes
+        return (
+            ask_utils.is_intent_name("EscolherContasIntent")(handler_input)
+            or ask_utils.is_intent_name("ResponderContasIntent")(handler_input)
+            or session.get("jogo_contas_ativo", False)
+            or (ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input) and session.get("modo_jogo") == "contas")
+            or (ask_utils.is_intent_name("ConfirmarNivelIntent")(handler_input) and session.get("modo_jogo") == "contas")
+            or (ask_utils.is_intent_name("AMAZON.NoIntent")(handler_input) and session.get("modo_jogo") == "contas")
+            or (ask_utils.is_intent_name("RecusarIntent")(handler_input) and session.get("modo_jogo") == "contas")
+            or session.get("aguardando_resposta_jogo_contas", False)
+        )
+    
+    def handle(self, handler_input):
+        session = handler_input.attributes_manager.session_attributes
+        intent_name = ask_utils.get_intent_name(handler_input)
+        logger.info(f"JogoContasHandler.handle - intent: {intent_name}, modo_jogo: {session.get('modo_jogo')}, jogo_contas_ativo: {session.get('jogo_contas_ativo')}")
+        
+        # Se está aguardando resposta sobre jogar outro jogo
+        if session.get("aguardando_resposta_jogo_contas", False):
+            logger.info(f"JogoContasHandler - aguardando resposta sobre outro jogo")
+            session["aguardando_resposta_jogo_contas"] = False
+            session["aguardando_escolha_jogo"] = True
+            texto = obter_texto_usuario(handler_input).lower()
+            
+            # Se usuário quer sair
+            if "sair" in texto or "não" in texto or "nao" in texto or "no" in texto:
+                speak_output = "Até logo! Obrigado por jogar comigo."
+                return handler_input.response_builder.speak(speak_output).response
+            
+            # Caso contrário, volta ao menu principal
+            speak_output = (
+                "Temos seis jogos: memorizar palavras, jogo de parentes, jogo de sons, "
+                "jogo de ordem das coisas, jogo qual não pertence e jogo de contas. Qual você quer? "
+                "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem, "
+                "jogo qual não pertence ou jogo de contas."
+            )
+            return (
+                handler_input.response_builder
+                .speak(speak_output)
+                .ask("Memorizar palavras, parentes, sons, ordem, qual não pertence ou contas?")
+                .response
+            )
+        
+        # Se o jogo já está ativo, processa a resposta do usuário (prioridade máxima)
+        if session.get("jogo_contas_ativo", False):
+            logger.info(f"JogoContasHandler - processando resposta do usuário")
+            return self._processar_resposta(handler_input, session)
+        
+        # Se o usuário disse "sim" para jogar de novo
+        if (ask_utils.is_intent_name("AMAZON.YesIntent")(handler_input) or ask_utils.is_intent_name("ConfirmarNivelIntent")(handler_input)) and session.get("modo_jogo") == "contas":
+            logger.info(f"JogoContasHandler - usuário disse sim, iniciando novo jogo")
+            return self._iniciar_jogo(handler_input, session)
+        
+        # Se o usuário disse "não" para jogar de novo
+        if (ask_utils.is_intent_name("AMAZON.NoIntent")(handler_input) or ask_utils.is_intent_name("RecusarIntent")(handler_input)) and session.get("modo_jogo") == "contas":
+            logger.info(f"JogoContasHandler - usuário disse não, perguntando outro jogo")
+            
+            # Registrar estatísticas antes de sair do jogo
+            user_id = session.get("user_id")
+            flush_session_stats(session, user_id)
+            
+            session["modo_jogo"] = None
+            session["aguardando_resposta_jogo_contas"] = True
+            speak_output = (
+                "Quer jogar outro jogo ou sair? "
+                "Você pode jogar memorizar palavras, jogo de parentes, jogo de sons, "
+                "jogo de ordem das coisas, jogo qual não pertence ou jogo de contas."
+            )
+            return (
+                handler_input.response_builder
+                .speak(speak_output)
+                .ask("Diga qual jogo quer jogar ou sair.")
+                .response
+            )
+        
+        # Inicia um novo jogo
+        logger.info(f"JogoContasHandler - iniciando novo jogo")
+        return self._iniciar_jogo(handler_input, session)
+    
+    def _iniciar_jogo(self, handler_input, session):
+        """Inicia uma nova rodada do jogo de contas."""
+        dados_conta = gerar_pergunta_conta()
+        
+        session["jogo_contas_ativo"] = True
+        session["resposta_correta_contas"] = dados_conta["resposta"]
+        session["pergunta_atual_contas"] = dados_conta["pergunta"]
+        
+        texto_falado = f"Vamos resolver contas! {dados_conta['pergunta']}"
+        
+        response_builder = handler_input.response_builder.speak(texto_falado).ask("Qual é a resposta?")
+        
+        return response_builder.response
+    
+    def _processar_resposta(self, handler_input, session):
+        """Processa a resposta do usuário."""
+        texto_usuario = obter_texto_usuario(handler_input) or ""
+        resposta_correta = session.get("resposta_correta_contas", 0)
+        
+        logger.info(f"JogoContasHandler._processar_resposta - texto_usuario: '{texto_usuario}', resposta_correta: {resposta_correta}")
+        
+        # Verificar se a resposta está correta
+        acertou = verificar_resposta_conta(texto_usuario, resposta_correta)
+        
+        logger.info(f"JogoContasHandler._processar_resposta - acertou: {acertou}")
+        
+        if acertou:
+            speak_output = "Muito bem! Você acertou! "
+            session["acertos_contas"] = session.get("acertos_contas", 0) + 1
+            registrar_acerto_sessao(session, "no jogo de contas")
+        else:
+            speak_output = f"Não foi dessa vez. A resposta correta era {resposta_correta}. "
+            session["erros_contas"] = session.get("erros_contas", 0) + 1
+            registrar_erro_sessao(session, "no jogo de contas")
+        
+        # Registrar estatisticas desta rodada
+        user_id = session.get("user_id")
+        logger.info(
+            f"JogoContasHandler._processar_resposta - user_id: {user_id}, "
+            f"session_start_time: {session.get('session_start_time')}"
+        )
+        flush_session_stats(session, user_id)
+        
+        # Pergunta se quer jogar de novo (define modo_jogo e desativa jogo ativo)
+        session["jogo_contas_ativo"] = False
+        session["modo_jogo"] = "contas"
+        speak_output += "Quer jogar outro jogo, sair ou exportar relatório?"
+        
+        return (
+            handler_input.response_builder
+            .speak(speak_output)
+            .ask("Diga qual jogo quer jogar, sair ou exportar relatório.")
+            .response
+        )
+
+
 sb = SkillBuilder()
 
 sb.add_request_handler(LaunchRequestHandler())
@@ -1681,6 +1850,7 @@ sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
 sb.add_request_handler(ConfiguracoesHandler())
+sb.add_request_handler(JogoContasHandler())
 sb.add_request_handler(ExportarRelatorioHandler())
 sb.add_request_handler(JogoSonsHandler())
 sb.add_request_handler(JogoOrdemHandler())

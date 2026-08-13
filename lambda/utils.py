@@ -378,6 +378,359 @@ def formatar_parentes_cadastrados(people):
     return "; ".join(partes)
 
 
+def gerar_pergunta_conta():
+    """Gera uma pergunta de conta matemática básica aleatória."""
+    import random
+    
+    operacoes = ['+', '-', '*', '/']
+    operacao = random.choice(operacoes)
+    
+    if operacao == '+':
+        # Adição: números entre 1 e 100
+        num1 = random.randint(1, 100)
+        num2 = random.randint(1, 100)
+        resposta = num1 + num2
+        pergunta = f"Quanto é {num1} mais {num2}?"
+        
+    elif operacao == '-':
+        # Subtração: garantir resultado positivo
+        num1 = random.randint(1, 100)
+        num2 = random.randint(1, num1)
+        resposta = num1 - num2
+        pergunta = f"Quanto é {num1} menos {num2}?"
+        
+    elif operacao == '*':
+        # Multiplicação: números menores para facilitar
+        num1 = random.randint(1, 12)
+        num2 = random.randint(1, 12)
+        resposta = num1 * num2
+        pergunta = f"Quanto é {num1} vezes {num2}?"
+        
+    else:  # operacao == '/'
+        # Divisão: garantir resultado inteiro
+        num2 = random.randint(1, 12)
+        resposta = random.randint(1, 12)
+        num1 = num2 * resposta
+        pergunta = f"Quanto é {num1} dividido por {num2}?"
+    
+    return {
+        "pergunta": pergunta,
+        "resposta": resposta,
+        "operacao": operacao
+    }
+
+
+def texto_para_numeros(texto):
+    """
+    Extrai todos os números presentes no texto, sejam eles dígitos (ex: '25')
+    ou escritos por extenso (ex: 'vinte e cinco', 'cento e dez', 'três').
+    """
+    if not texto:
+        return []
+        
+    normalizado = normalizar_texto(texto)
+    logger.info(f"texto_para_numeros - texto original: '{texto}', normalizado: '{normalizado}'")
+    numeros_encontrados = []
+    
+    # 1. Extrair dígitos usando regex (ex: "é 25", "dá 100", "a resposta é 42")
+    digitos = re.findall(r'\d+', normalizado)
+    for d in digitos:
+        try:
+            numeros_encontrados.append(int(d))
+        except ValueError:
+            pass
+    
+    # 1.5 Verificação direta de números isolados após normalização
+    # Isso ajuda quando o usuário diz "é 25" ou "25"
+    for palavra in normalizado.split():
+        if palavra.isdigit():
+            try:
+                numeros_encontrados.append(int(palavra))
+            except ValueError:
+                pass
+    
+    # 2. Mapeamentos para converter texto em números por extenso
+    unidades = {
+        "zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3,
+        "quatro": 4, "cinco": 5, "seis": 6, "meia": 6, "sete": 7, "oito": 8, "nove": 9
+    }
+    especiais = {
+        "dez": 10, "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "catorze": 14,
+        "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19
+    }
+    dezenas = {
+        "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "cincoenta": 50,
+        "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90
+    }
+    centenas = {
+        "cem": 100, "cento": 100, "duzentos": 200, "duzentas": 200,
+        "trezentos": 300, "trezentas": 300, "quatrocentos": 400, "quatrocentas": 400,
+        "quinhentos": 500, "quinhentas": 500, "seiscentos": 600, "seiscentas": 600,
+        "setecentos": 700, "setecentas": 700, "oitocentos": 800, "oitocentas": 800,
+        "novecentos": 900, "novecentas": 900
+    }
+    
+    palavras = normalizado.split()
+    logger.info(f"texto_para_numeros - palavras: {palavras}")
+    
+    i = 0
+    while i < len(palavras):
+        palavra = palavras[i]
+        logger.info(f"texto_para_numeros - processando palavra '{palavra}' (índice {i})")
+        
+        # Centenas (ex: "cento e vinte e cinco", "cento e doze", "cento e cinco", "cem")
+        if palavra in centenas:
+            val = centenas[palavra]
+            i += 1
+            if i < len(palavras) and palavras[i] == "e":
+                i += 1
+            if i < len(palavras) and palavras[i] in dezenas:
+                val += dezenas[palavras[i]]
+                i += 1
+                if i < len(palavras) and palavras[i] == "e":
+                    i += 1
+                if i < len(palavras) and palavras[i] in unidades:
+                    val += unidades[palavras[i]]
+                    i += 1
+            elif i < len(palavras) and palavras[i] in especiais:
+                val += especiais[palavras[i]]
+                i += 1
+            elif i < len(palavras) and palavras[i] in unidades:
+                val += unidades[palavras[i]]
+                i += 1
+            numeros_encontrados.append(val)
+            continue
+            
+        # Dezenas (ex: "vinte e cinco", "trinta")
+        if palavra in dezenas:
+            val = dezenas[palavra]
+            logger.info(f"texto_para_numeros - dezena encontrada: '{palavra}' = {val}")
+            i += 1
+            if i < len(palavras) and palavras[i] == "e":
+                logger.info(f"texto_para_numeros - 'e' encontrado após dezena")
+                i += 1
+                if i < len(palavras) and palavras[i] in unidades:
+                    val += unidades[palavra[i]]
+                    logger.info(f"texto_para_numeros - unidade após 'e': '{palavra[i]}' = {unidades[palavra[i]]}, total: {val}")
+                    i += 1
+            logger.info(f"texto_para_numeros - adicionando valor de dezena: {val}")
+            numeros_encontrados.append(val)
+            continue
+            
+        # Especiais (ex: "onze", "dezesseis")
+        if palavra in especiais:
+            numeros_encontrados.append(especiais[palavra])
+            i += 1
+            continue
+            
+        # Unidades (ex: "cinco", "três")
+        if palavra in unidades:
+            numeros_encontrados.append(unidades[palavra])
+            i += 1
+            continue
+            
+        i += 1
+        
+    logger.info(f"texto_para_numeros - números encontrados: {numeros_encontrados}")
+    return numeros_encontrados
+            
+    # 2. Mapeamentos para converter texto em números por extenso
+    unidades = {
+        "zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3,
+        "quatro": 4, "cinco": 5, "seis": 6, "meia": 6, "sete": 7, "oito": 8, "nove": 9
+    }
+    especiais = {
+        "dez": 10, "onze": 11, "doze": 12, "treze": 13, "quatorze": 14, "catorze": 14,
+        "quinze": 15, "dezesseis": 16, "dezessete": 17, "dezoito": 18, "dezenove": 19
+    }
+    dezenas = {
+        "vinte": 20, "trinta": 30, "quarenta": 40, "cinquenta": 50, "cincoenta": 50,
+        "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90
+    }
+    centenas = {
+        "cem": 100, "cento": 100, "duzentos": 200, "duzentas": 200,
+        "trezentos": 300, "trezentas": 300, "quatrocentos": 400, "quatrocentas": 400,
+        "quinhentos": 500, "quinhentas": 500, "seiscentos": 600, "seiscentas": 600,
+        "setecentos": 700, "setecentas": 700, "oitocentos": 800, "oitocentas": 800,
+        "novecentos": 900, "novecentas": 900
+    }
+    
+    palavras = normalizado.split()
+    logger.info(f"texto_para_numeros - palavras: {palavras}")
+    
+    i = 0
+    while i < len(palavras):
+        palavra = palavras[i]
+        logger.info(f"texto_para_numeros - processando palavra '{palavra}' (índice {i})")
+        
+        # Centenas (ex: "cento e vinte e cinco", "cento e doze", "cento e cinco", "cem")
+        if palavra in centenas:
+            val = centenas[palavra]
+            i += 1
+            if i < len(palavras) and palavras[i] == "e":
+                i += 1
+            if i < len(palavras) and palavras[i] in dezenas:
+                val += dezenas[palavras[i]]
+                i += 1
+                if i < len(palavras) and palavras[i] == "e":
+                    i += 1
+                if i < len(palavras) and palavras[i] in unidades:
+                    val += unidades[palavras[i]]
+                    i += 1
+            elif i < len(palavras) and palavras[i] in especiais:
+                val += especiais[palavras[i]]
+                i += 1
+            elif i < len(palavras) and palavras[i] in unidades:
+                val += unidades[palavras[i]]
+                i += 1
+            numeros_encontrados.append(val)
+            continue
+            
+        # Dezenas (ex: "vinte e cinco", "trinta")
+        if palavra in dezenas:
+            val = dezenas[palavra]
+            i += 1
+            if i < len(palavras) and palavras[i] == "e":
+                i += 1
+                if i < len(palavras) and palavras[i] in unidades:
+                    val += unidades[palavras[i]]
+                    i += 1
+            numeros_encontrados.append(val)
+            continue
+            
+        # Especiais (ex: "onze", "dezesseis")
+        if palavra in especiais:
+            numeros_encontrados.append(especiais[palavra])
+            i += 1
+            continue
+            
+        # Unidades (ex: "cinco", "três")
+        if palavra in unidades:
+            numeros_encontrados.append(unidades[palavra])
+            i += 1
+            continue
+            
+        i += 1
+        
+    return numeros_encontrados
+
+
+def verificar_resposta_conta_ia(resposta_usuario, resposta_correta):
+    """Fallback com IA (OpenRouter) se o analisador local não identificar a resposta."""
+    if not resposta_usuario:
+        return False
+    try:
+        prompt = f"""
+        Um usuário em uma skill da Alexa respondeu a uma pergunta matemática básica.
+        A resposta numericamente correta é: {resposta_correta}.
+        O usuário falou: "{resposta_usuario}".
+        Pergunta: O que o usuário falou indica que ele acertou a resposta numericamente?
+        Responda APENAS com "SIM" ou "NAO".
+        """
+        resultado = _chamar_openrouter(prompt)
+        logger.info(f"Fallback IA verificar_resposta_conta - prompt='{resposta_usuario}', esperado={resposta_correta}, ia_resp='{resultado}'")
+        return "SIM" in resultado.upper()
+    except Exception as e:
+        logger.error(f"Erro no fallback IA de verificação de conta: {e}")
+        return False
+
+
+def verificar_resposta_conta(resposta_usuario, resposta_correta):
+    """Verifica se a resposta do usuário está correta (local + fallback IA)."""
+    if not resposta_usuario:
+        return False
+    try:
+        correta_num = int(resposta_correta)
+    except (ValueError, TypeError):
+        return False
+    
+    # 0. Verificação direta por string (fallback simples)
+    resposta_normalizada = normalizar_texto(str(resposta_usuario))
+    if str(correta_num) in resposta_normalizada:
+        logger.info(f"verificar_resposta_conta - correção direta por string: '{correta_num}' encontrado em '{resposta_normalizada}'")
+        return True
+        
+    # 1. Tentar parser local de números (dígitos e extenso)
+    numeros = texto_para_numeros(str(resposta_usuario))
+    logger.info(f"verificar_resposta_conta - números extraídos: {numeros}, resposta correta: {correta_num}")
+    if correta_num in numeros:
+        return True
+
+    # 2. Se falhou localmente, consultar a IA para garantir flexibilidade total
+    return verificar_resposta_conta_ia(resposta_usuario, resposta_correta)
+
+
+def extrair_texto_do_evento_raw(handler_input):
+    """Lê o texto falado diretamente do JSON do evento Alexa (camelCase)."""
+    try:
+        from ask_sdk_core.serialize import DefaultSerializer
+        serializer = DefaultSerializer()
+        event = serializer.serialize(handler_input.request_envelope)
+        if not isinstance(event, dict):
+            return ""
+
+        req = event.get("request") or {}
+        transcript = req.get("inputTranscript") or req.get("input_transcript")
+        if transcript:
+            return str(transcript).strip()
+
+        intent = req.get("intent") or {}
+        for slot in (intent.get("slots") or {}).values():
+            if not slot:
+                continue
+            valor = slot.get("value")
+            if valor:
+                return str(valor).strip()
+            resolutions = (slot.get("resolutions") or {}).get("resolutionsPerAuthority") or []
+            for authority in resolutions:
+                for item in authority.get("values") or []:
+                    nome = (item.get("value") or {}).get("name")
+                    if nome:
+                        return str(nome).strip()
+    except Exception as e:
+        logger.warning("Falha ao extrair texto do evento raw: %s", e)
+    return ""
+
+
+def extrair_texto_usuario_alexa(handler_input):
+    """Extrai o que o usuário falou, tentando todas as fontes disponíveis."""
+    import ask_sdk_core.utils as ask_utils
+
+    request = handler_input.request_envelope.request
+
+    logger.info(f"extrair_texto_usuario_alexa - request type: {type(request)}, has input_transcript: {hasattr(request, 'input_transcript')}")
+    
+    if hasattr(request, "input_transcript") and request.input_transcript:
+        logger.info(f"extrair_texto_usuario_alexa - input_transcript: '{request.input_transcript}'")
+        return request.input_transcript.strip()
+
+    for slot_name in ("som", "resposta", "respostaConta"):
+        valor = ask_utils.get_slot_value(handler_input=handler_input, slot_name=slot_name) or ""
+        if valor:
+            logger.info(f"extrair_texto_usuario_alexa - slot '{slot_name}': '{valor}'")
+            return valor.strip()
+
+    if hasattr(request, "intent") and request.intent and request.intent.slots:
+        logger.info(f"extrair_texto_usuario_alexa - verificando slots do intent")
+        for slot in request.intent.slots.values():
+            if slot and slot.value:
+                logger.info(f"extrair_texto_usuario_alexa - slot value: '{slot.value}'")
+                return slot.value.strip()
+            resolutions = getattr(slot, "resolutions", None)
+            if not resolutions:
+                continue
+            for authority in resolutions.resolutions_per_authority or []:
+                for resolution in authority.values or []:
+                    name = getattr(getattr(resolution, "value", None), "name", None)
+                    if name:
+                        logger.info(f"extrair_texto_usuario_alexa - resolution name: '{name}'")
+                        return name.strip()
+
+    logger.info(f"extrair_texto_usuario_alexa - usando fallback raw")
+    return extrair_texto_do_evento_raw(handler_input)
+
+
+
 def gerar_pergunta_parentes(people, relacoes_perguntadas=None):
     """
     Gera pergunta sobre parentes cadastrados (IA com fallback).
@@ -800,17 +1153,23 @@ def extrair_texto_usuario_alexa(handler_input):
 
     request = handler_input.request_envelope.request
 
+    logger.info(f"extrair_texto_usuario_alexa - request type: {type(request)}, has input_transcript: {hasattr(request, 'input_transcript')}")
+    
     if hasattr(request, "input_transcript") and request.input_transcript:
+        logger.info(f"extrair_texto_usuario_alexa - input_transcript: '{request.input_transcript}'")
         return request.input_transcript.strip()
 
-    for slot_name in ("som", "resposta"):
+    for slot_name in ("som", "resposta", "respostaConta"):
         valor = ask_utils.get_slot_value(handler_input=handler_input, slot_name=slot_name) or ""
         if valor:
+            logger.info(f"extrair_texto_usuario_alexa - slot '{slot_name}': '{valor}'")
             return valor.strip()
 
     if hasattr(request, "intent") and request.intent and request.intent.slots:
+        logger.info(f"extrair_texto_usuario_alexa - verificando slots do intent")
         for slot in request.intent.slots.values():
             if slot and slot.value:
+                logger.info(f"extrair_texto_usuario_alexa - slot value: '{slot.value}'")
                 return slot.value.strip()
             resolutions = getattr(slot, "resolutions", None)
             if not resolutions:
@@ -819,8 +1178,10 @@ def extrair_texto_usuario_alexa(handler_input):
                 for resolution in authority.values or []:
                     name = getattr(getattr(resolution, "value", None), "name", None)
                     if name:
+                        logger.info(f"extrair_texto_usuario_alexa - resolution name: '{name}'")
                         return name.strip()
 
+    logger.info(f"extrair_texto_usuario_alexa - usando fallback raw")
     return extrair_texto_do_evento_raw(handler_input)
 
 
@@ -845,4 +1206,3 @@ def verificar_resposta_som(respostas_validas, resposta_usuario, nome_som=None):
             return True
 
     return False
-

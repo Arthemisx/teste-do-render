@@ -311,6 +311,38 @@
                     ]
                 },
                 {
+                    "name": "EscolherContasIntent",
+                    "slots": [],
+                    "samples": [
+                        "jogo de contas",
+                        "jogo de matemática",
+                        "jogo matemático",
+                        "contas",
+                        "matemática",
+                        "resolver contas",
+                        "fazer contas",
+                        "calcular",
+                        "jogo de cálculo"
+                    ]
+                },
+                {
+                    "name": "ResponderContasIntent",
+                    "slots": [
+                        {
+                            "name": "respostaConta",
+                            "type": "AMAZON.NUMBER"
+                        }
+                    ],
+                    "samples": [
+                        "{respostaConta}",
+                        "a resposta é {respostaConta}",
+                        "é {respostaConta}",
+                        "o resultado é {respostaConta}",
+                        "dá {respostaConta}",
+                        "o resultado dá {respostaConta}"
+                    ]
+                },
+                {
                     "name": "ConfiguracoesIntent",
                     "slots": [],
                     "samples": [
