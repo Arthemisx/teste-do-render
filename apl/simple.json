@@ -1,0 +1,44 @@
+{
+  "type": "APL",
+  "version": "1.7",
+  "theme": "dark",
+  "import": [
+    {
+      "name": "alexa-layouts",
+      "version": "1.4.0"
+    }
+  ],
+  "mainTemplate": {
+    "parameters": [
+      "payload"
+    ],
+    "items": [
+      {
+        "type": "Container",
+        "width": "100%",
+        "height": "100%",
+        "backgroundColor": "#FFFACD",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "items": [
+          {
+            "type": "Text",
+            "text": "${payload.title}",
+            "fontSize": "48dp",
+            "fontWeight": "bold",
+            "color": "#FF69B4",
+            "textAlign": "center"
+          },
+          {
+            "type": "Text",
+            "text": "${payload.subtitle}",
+            "fontSize": "28dp",
+            "color": "#FFD700",
+            "textAlign": "center",
+            "marginTop": "20dp"
+          }
+        ]
+      }
+    ]
+  }
+}

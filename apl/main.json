@@ -13,10 +13,10 @@
       "name": "colorGradient",
       "values": [
         {
-          "color": "#667eea"
+          "color": "#FFB6C1"
         },
         {
-          "color": "#764ba2"
+          "color": "#FFFACD"
         }
       ]
     }
@@ -27,7 +27,7 @@
         {
           "fontSize": "48dp",
           "fontWeight": "bold",
-          "color": "#667eea"
+          "color": "#FF69B4"
         }
       ]
     },
@@ -35,7 +35,7 @@
       "values": [
         {
           "fontSize": "28dp",
-          "color": "#CCCCCC"
+          "color": "#FFD700"
         }
       ]
     },
@@ -50,7 +50,7 @@
     "buttonStyle": {
       "values": [
         {
-          "backgroundColor": "#667eea",
+          "backgroundColor": "#FF69B4",
           "borderRadius": "20dp",
           "height": "60dp"
         }
@@ -203,18 +203,19 @@
               "alignItems": "center",
               "justifyContent": "center",
               "padding": "40dp",
+              "backgroundColor": "#FFFACD",
               "items": [
                 {
                   "type": "Container",
                   "width": "90%",
-                  "backgroundColor": "#FFFFFF",
+                  "backgroundColor": "#FFE4E1",
                   "borderRadius": "20dp",
                   "padding": "40dp",
                   "shadow": {
                     "horizontalOffset": 0,
                     "verticalOffset": 10,
                     "radius": 20,
-                    "color": "#40000000"
+                    "color": "#40FF69B4"
                   },
                   "items": [
                     {
@@ -257,11 +258,13 @@
           "type": "Container",
           "width": "100%",
           "height": "100%",
+          "backgroundColor": "#FFFACD",
           "items": [
             {
               "type": "AlexaHeader",
               "headerTitle": "Qual não pertence?",
-              "headerSubtitle": "Tema: ${tema}"
+              "headerSubtitle": "Tema: ${tema}",
+              "headerBackgroundColor": "#FF69B4"
             },
             {
               "type": "Container",
@@ -386,6 +389,7 @@
           "type": "Container",
           "width": "100%",
           "height": "100%",
+          "backgroundColor": "#FFFACD",
           "items": [
             {
               "type": "Container",
@@ -408,13 +412,13 @@
                     "type": "Frame",
                     "width": "60dp",
                     "height": "60dp",
-                    "backgroundColor": "#FFFFFF",
+                    "backgroundColor": "#FFB6C1",
                     "borderRadius": "30dp",
                     "item": {
                       "type": "Text",
                       "text": "←",
                       "fontSize": "40dp",
-                      "color": "#667eea",
+                      "color": "#FF69B4",
                       "textAlign": "center",
                       "textAlignVertical": "center"
                     }
@@ -425,7 +429,8 @@
             {
               "type": "AlexaHeader",
               "headerTitle": "Estatísticas",
-              "headerSubtitle": "Seu progresso"
+              "headerSubtitle": "Seu progresso",
+              "headerBackgroundColor": "#FF69B4"
             },
             {
               "type": "Container",
@@ -436,7 +441,7 @@
                 {
                   "type": "Container",
                   "width": "100%",
-                  "backgroundColor": "#F5F5F5",
+                  "backgroundColor": "#FFE4E1",
                   "borderRadius": "15dp",
                   "padding": "20dp",
                   "marginBottom": "15dp",

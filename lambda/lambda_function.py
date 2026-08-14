@@ -322,9 +322,11 @@ def iniciar_modo_parentes(session_attrs, prefixo=""):
 
 class LaunchRequestHandler(AbstractRequestHandler):
     def can_handle(self, handler_input):
+        logger.info("LaunchRequestHandler.can_handle - verificado")
         return ask_utils.is_request_type("LaunchRequest")(handler_input)
 
     def handle(self, handler_input):
+        logger.info("LaunchRequestHandler.handle - iniciando")
         session = handler_input.attributes_manager.session_attributes
         sincronizar_dados_nuvem(handler_input, session)
 
@@ -352,20 +354,26 @@ class LaunchRequestHandler(AbstractRequestHandler):
             "O que você quer fazer?"
         )
         
+        logger.info(f"LaunchRequestHandler - speak_output: {speak_output}")
+        
         response_builder = handler_input.response_builder.speak(speak_output).ask(
             "Diga memorizar palavras, jogo de parentes, jogo de sons, jogo de ordem, jogo qual não pertence, jogo de contas ou acessar configurações."
         )
         
-        # Mostrar interface APL se disponível (comentado temporariamente devido a timeout)
-        # logger.info(f"Verificando suporte APL...")
-        # if tem_suporte_apl(handler_input):
-        #     logger.info(f"APL suportado, tentando mostrar tela principal...")
-        #     resposta_apl = mostrar_tela_principal(handler_input)
-        #     if resposta_apl:
-        #         response_builder = resposta_apl
-        #     else:
-        #         logger.warning(f"APL não suportado neste dispositivo")
+        # Tentar mostrar interface APL
+        logger.info(f"Verificando suporte APL...")
+        if tem_suporte_apl(handler_input):
+            logger.info(f"APL suportado, tentando mostrar tela principal...")
+            resposta_apl = mostrar_tela_principal(handler_input)
+            if resposta_apl:
+                logger.info(f"APL resposta criada com sucesso")
+                response_builder = resposta_apl
+            else:
+                logger.warning(f"APL não suportado neste dispositivo")
+        else:
+            logger.warning(f"APL não suportado pelo dispositivo")
         
+        logger.info("LaunchRequestHandler.handle - finalizando")
         return response_builder.response
 
 
@@ -1325,11 +1333,13 @@ class ShowStatsHandler(AbstractRequestHandler):
             }
             
             # Mostrar tela de estatísticas no Echo Show
+            response_builder = handler_input.response_builder.speak("Aqui estão suas estatísticas de uso.")
             if tem_suporte_apl(handler_input):
-                mostrar_tela_estatisticas(handler_input, dados_estatisticas)
+                resposta_apl = mostrar_tela_estatisticas(handler_input, dados_estatisticas)
+                if resposta_apl:
+                    response_builder = resposta_apl
             
-            speak_output = "Aqui estão suas estatísticas de uso."
-            return handler_input.response_builder.speak(speak_output).response
+            return response_builder.response
             
         except Exception as e:
             logger.error(f"Erro ao carregar estatísticas: {e}")
@@ -1349,17 +1359,27 @@ class GoBackHandler(AbstractRequestHandler):
     
     def handle(self, handler_input):
         # Mostrar tela principal novamente
+        response_builder = handler_input.response_builder.speak("Voltando para a tela principal.")
         if tem_suporte_apl(handler_input):
-            mostrar_tela_principal(handler_input)
+            resposta_apl = mostrar_tela_principal(handler_input)
+            if resposta_apl:
+                response_builder = resposta_apl
         
-        speak_output = "Voltando para a tela principal."
-        return handler_input.response_builder.speak(speak_output).response
+        return response_builder.response
 
 
 class ConfiguracoesHandler(AbstractRequestHandler):
     """Handler para acessar configurações e ver estatísticas."""
     
     def can_handle(self, handler_input):
+        # NUNCA interceptar LaunchRequest ou Fallback - deixar handlers específicos cuidar
+        if ask_utils.is_request_type("LaunchRequest")(handler_input):
+            logger.info(f"ConfiguracoesHandler - ignorando LaunchRequest")
+            return False
+        if ask_utils.is_intent_name("AMAZON.FallbackIntent")(handler_input):
+            logger.info(f"ConfiguracoesHandler - ignorando FallbackIntent")
+            return False
+            
         session = handler_input.attributes_manager.session_attributes
         intent_name = ask_utils.get_intent_name(handler_input)
         logger.info(f"ConfiguracoesHandler - intent: {intent_name}, aguardando_escolha_jogo: {session.get('aguardando_escolha_jogo')}, aguardando_opcao_configuracoes: {session.get('aguardando_opcao_configuracoes')}, modo_jogo: {session.get('modo_jogo')}, jogo_nao_pertence_ativo: {session.get('jogo_nao_pertence_ativo')}")
