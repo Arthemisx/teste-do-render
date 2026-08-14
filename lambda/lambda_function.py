@@ -48,6 +48,8 @@ from utils import (
     verificar_resposta_som,
     gerar_pergunta_conta,
     verificar_resposta_conta,
+    obter_user_id_linkado,
+    verificar_usuario_vinculado,
 )
 
 from apl_utils import (
@@ -62,9 +64,20 @@ logger.setLevel(logging.INFO)
 
 
 def obter_user_id(handler_input):
+    """Obtém user_id priorizando account linking, depois Alexa user_id."""
+    # Primeiro tenta obter do account linking
+    user_id_linkado = obter_user_id_linkado(handler_input)
+    if user_id_linkado:
+        logger.info(f"Usando user_id do account linking: {user_id_linkado[:20]}...")
+        return user_id_linkado
+    
+    # Se não tiver account linking, usa o user_id da Alexa
     try:
-        return handler_input.request_envelope.session.user.user_id
+        user_id_alexa = handler_input.request_envelope.session.user.user_id
+        logger.info(f"Usando user_id da Alexa: {user_id_alexa[:20]}...")
+        return user_id_alexa
     except Exception:
+        logger.warning("Não foi possível obter user_id da Alexa")
         return None
 
 
@@ -328,6 +341,26 @@ class LaunchRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         logger.info("LaunchRequestHandler.handle - iniciando")
         session = handler_input.attributes_manager.session_attributes
+        
+        # Verificar se usuário tem account linking
+        if not verificar_usuario_vinculado(handler_input):
+            logger.info("Usuário não vinculado - pedindo account linking")
+            speak_output = "Olá! Eu sou a Dona Memória. Para salvar seu progresso e ter estatísticas personalizadas, você precisa vincular sua conta. Vou abrir a página de vinculação para você."
+            return (
+                handler_input.response_builder
+                .speak(speak_output)
+                .add_directive(
+                    {
+                        "type": "Connections.StartConnection",
+                        "uri": "connection://AMAZON.AccountLink/1",
+                        "input": {},
+                        "token": "account_linking_token"
+                    }
+                )
+                .response
+            )
+        
+        logger.info("Usuário vinculado - carregando dados")
         sincronizar_dados_nuvem(handler_input, session)
 
         # Rastrear tempo de início da sessão

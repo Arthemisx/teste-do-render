@@ -22,6 +22,32 @@ RENDER_API_URL = os.environ.get(
 RENDER_API_KEY = os.environ.get("RENDER_API_KEY", "dona-memoria-api-key-2026")
 
 
+def obter_user_id_linkado(handler_input):
+    """Obtém o user_id do usuário vinculado via account linking."""
+    try:
+        system = handler_input.request_envelope.context.system
+        if system.user and system.user.access_token:
+            logger.info(f"User ID do account linking: {system.user.access_token[:20]}...")
+            return system.user.access_token
+        logger.info("Nenhum access_token encontrado no contexto")
+        return None
+    except Exception as e:
+        logger.error(f"Erro ao obter user_id do account linking: {e}")
+        return None
+
+
+def verificar_usuario_vinculado(handler_input):
+    """Verifica se o usuário tem account linking ativo."""
+    try:
+        system = handler_input.request_envelope.context.system
+        vinculado = system.user and system.user.access_token is not None
+        logger.info(f"Usuário vinculado: {vinculado}")
+        return vinculado
+    except Exception as e:
+        logger.error(f"Erro ao verificar account linking: {e}")
+        return False
+
+
 def normalizar_texto(texto):
     """Remove acentos, pontuação e deixa minúsculo para comparação flexível."""
     if not texto:

@@ -6,7 +6,9 @@ import logging
 import os
 import sqlite3
 import unicodedata
-from datetime import datetime, timezone
+import secrets
+import hashlib
+from datetime import datetime, timezone, timedelta
 from io import BytesIO
 
 from flask import Flask, jsonify, request, send_file
@@ -18,6 +20,11 @@ app = Flask(__name__)
 API_SECRET = os.environ.get("API_SECRET", "dona-memoria-api-key-2026")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "dona_memoria.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# Configurações OAuth2 para Account Linking
+OAUTH_CLIENT_ID = os.environ.get("OAUTH_CLIENT_ID", "dona-memoria-client")
+OAUTH_CLIENT_SECRET = os.environ.get("OAUTH_CLIENT_SECRET", "dona-memoria-secret")
+OAUTH_REDIRECT_URI = os.environ.get("OAUTH_REDIRECT_URI", "https://pitangui.amazon.com/alexa/redirect")
 
 
 def usar_postgres():
@@ -362,7 +369,193 @@ def baixar_pdf(user_id):
         return jsonify({"erro": f"Erro ao gerar PDF: {str(e)}"}), 500
 
 
+# ==================== ACCOUNT LINKING OAUTH2 ====================
+
+def gerar_token_aleatorio():
+    """Gera um token aleatório seguro."""
+    return secrets.token_urlsafe(32)
+
+def criar_tabela_tokens():
+    """Cria tabela para armazenar tokens OAuth2."""
+    if usar_postgres():
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS oauth_tokens (
+                access_token TEXT PRIMARY KEY,
+                refresh_token TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    else:
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS oauth_tokens (
+                access_token TEXT PRIMARY KEY,
+                refresh_token TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT
+            )
+            """
+        )
+        conn.commit()
+        conn.close()
+
+def salvar_token(access_token, refresh_token, user_id, expires_in=3600):
+    """Salva token OAuth2 no banco de dados."""
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    
+    if usar_postgres():
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO oauth_tokens (access_token, refresh_token, user_id, expires_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (access_token)
+            DO UPDATE SET refresh_token = EXCLUDED.refresh_token, user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
+            """,
+            (access_token, refresh_token, user_id, expires_at),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    else:
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.execute(
+            """
+            INSERT INTO oauth_tokens (access_token, refresh_token, user_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?, datetime.now(timezone.utc).isoformat())
+            ON CONFLICT(access_token) DO UPDATE SET refresh_token = excluded.refresh_token, user_id = excluded.user_id, expires_at = excluded.expires_at
+            """,
+            (access_token, refresh_token, user_id, expires_at.isoformat()),
+        )
+        conn.commit()
+        conn.close()
+
+def obter_token_por_access_token(access_token):
+    """Obtém dados do token pelo access token."""
+    if usar_postgres():
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT refresh_token, user_id, expires_at FROM oauth_tokens WHERE access_token = %s",
+            (access_token,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return row
+    else:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT refresh_token, user_id, expires_at FROM oauth_tokens WHERE access_token = ?",
+            (access_token,)
+        )
+        row = cur.fetchone()
+        conn.close()
+        return row
+
+@app.post("/oauth/token")
+def oauth_token():
+    """Endpoint OAuth2 para exchange de tokens (compatível com Alexa)."""
+    grant_type = request.form.get("grant_type")
+    client_id = request.form.get("client_id")
+    client_secret = request.form.get("client_secret")
+    
+    # Verificar credenciais do cliente
+    if client_id != OAUTH_CLIENT_ID or client_secret != OAUTH_CLIENT_SECRET:
+        return jsonify({"error": "invalid_client"}), 401
+    
+    if grant_type == "authorization_code":
+        # Para implementação futura com código de autorização
+        code = request.form.get("code")
+        # Aqui você validaria o código e trocaria por tokens
+        return jsonify({"error": "unsupported_grant_type"}), 400
+    
+    elif grant_type == "refresh_token":
+        # Renovar access token usando refresh token
+        refresh_token = request.form.get("refresh_token")
+        if not refresh_token:
+            return jsonify({"error": "invalid_request"}), 400
+        
+        # Em uma implementação real, você validaria o refresh token
+        # e geraria um novo access token
+        new_access_token = gerar_token_aleatorio()
+        # salvar_token(new_access_token, refresh_token, user_id, 3600)
+        
+        return jsonify({
+            "access_token": new_access_token,
+            "token_type": "bearer",
+            "expires_in": 3600,
+            "refresh_token": refresh_token
+        })
+    
+    elif grant_type == "client_credentials":
+        # Credenciais do cliente (mais simples para testes)
+        access_token = gerar_token_aleatorio()
+        expires_in = 3600  # 1 hora
+        
+        # Gerar um user_id temporário para testes
+        user_id = f"temp_{secrets.token_hex(16)}"
+        
+        salvar_token(access_token, access_token, user_id, expires_in)
+        
+        return jsonify({
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": expires_in,
+            "refresh_token": access_token  # Mesmo token para simplificar
+        })
+    
+    else:
+        return jsonify({"error": "unsupported_grant_type"}), 400
+
+@app.get("/oauth/validate")
+def oauth_validate():
+    """Valida um access token e retorna informações do usuário."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "invalid_token"}), 401
+    
+    access_token = auth_header.replace("Bearer ", "")
+    
+    token_data = obter_token_por_access_token(access_token)
+    if not token_data:
+        return jsonify({"error": "invalid_token"}), 401
+    
+    # Verificar se o token expirou
+    expires_at = token_data["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+    
+    if datetime.now(timezone.utc) > expires_at:
+        return jsonify({"error": "expired_token"}), 401
+    
+    # Token válido - retornar user_id
+    return jsonify({
+        "valid": True,
+        "user_id": token_data["user_id"],
+        "expires_at": expires_at.isoformat()
+    })
+
+
 if __name__ == "__main__":
     init_db()
+    criar_tabela_tokens()  # Criar tabela de tokens OAuth2
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
